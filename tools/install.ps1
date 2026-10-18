@@ -1,17 +1,58 @@
-# Terraform Plus development installation for Windows / PowerShell.
-# Kopiert nur bekannte Mod-Dateien in den einzelnen Terraform-Plus-Modordner.
+
+# Terraform Plus - Development Installation
+# Installiert den Mod in den konfigurierten LS25-Testordner.
+
 $ErrorActionPreference = 'Stop'
+
+# Pfade
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-$documents = [Environment]::GetFolderPath('MyDocuments')
-$mods = Join-Path $documents 'My Games\FarmingSimulator2025\mods'
+$desktop = [Environment]::GetFolderPath('Desktop')
+
+$mods = Join-Path $desktop 'FS25_Mods\_ModTest'
 $target = Join-Path $mods 'FS25_TerraformPlus'
 
-if (-not (Test-Path (Join-Path $documents 'My Games\FarmingSimulator2025'))) {
-    Write-Warning 'Das LS25-Benutzerverzeichnis wurde an diesem Pfad noch nicht gefunden. Pruefe den korrekten Dokumente-/Mods-Pfad.'
+# Pruefen, ob der konfigurierte Modordner existiert
+if (-not (Test-Path -LiteralPath $mods -PathType Container)) {
+    throw "Modverzeichnis nicht gefunden: $mods"
 }
+
+# Pruefen, ob alle notwendigen Quelldateien existieren
+$required = @(
+    'modDesc.xml'
+    'icon.dds'
+    'scripts'
+)
+
+foreach ($item in $required) {
+    $source = Join-Path $repo $item
+
+    if (-not (Test-Path -LiteralPath $source)) {
+        throw "Erforderliche Datei oder Ordner fehlt: $source"
+    }
+}
+
+# Zielordner erstellen
 New-Item -ItemType Directory -Force -Path $target | Out-Null
-Copy-Item -LiteralPath (Join-Path $repo 'modDesc.xml') -Destination $target -Force
-Copy-Item -LiteralPath (Join-Path $repo 'icon.png') -Destination $target -Force
-Copy-Item -LiteralPath (Join-Path $repo 'scripts') -Destination $target -Recurse -Force
-Write-Host "Terraform Plus nach $target kopiert." -ForegroundColor Green
-Write-Host 'Spiel neu starten und den Mod im Spielstand aktivieren.'
+
+# Alte Skripte entfernen, um veraltete Dateien zu vermeiden
+$targetScripts = Join-Path $target 'scripts'
+
+if (Test-Path -LiteralPath $targetScripts) {
+    Remove-Item -LiteralPath $targetScripts -Recurse -Force
+}
+
+# Dateien kopieren
+Copy-Item -LiteralPath (Join-Path $repo 'modDesc.xml') `
+    -Destination $target -Force
+
+Copy-Item -LiteralPath (Join-Path $repo 'icon.dds') `
+    -Destination $target -Force
+
+Copy-Item -LiteralPath (Join-Path $repo 'scripts') `
+    -Destination $target -Recurse -Force
+
+# Ausgabe
+Write-Host ""
+Write-Host "[Terraform Plus] Installation erfolgreich!" -ForegroundColor Green
+Write-Host "Ziel: $target"
+Write-Host "Spiel neu starten, um die Aenderungen zu laden."
