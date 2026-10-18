@@ -13,7 +13,7 @@
         <de><![CDATA[Terraform Plus - frühe Entwicklungsversion. Derzeit nur ein Ladetest; noch keine Geländeänderungen.]]></de>
     </description>
 
-    <iconFilename>icon.dds</iconFilename>
+    <iconFilename>icon.png</iconFilename>
     <multiplayer supported="false"/>
 
     <extraSourceFiles>
