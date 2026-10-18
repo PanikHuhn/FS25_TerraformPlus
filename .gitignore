@@ -1,0 +1,19 @@
+# Local builds and packages
+dist/
+*.zip
+
+# Logs, local saves and test data
+*.log
+log.txt
+savegame*/
+modSettings/
+
+# Editor, operating system, generated files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.tmp
+*.bak
+*.swp
+__pycache__/

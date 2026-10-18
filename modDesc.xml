@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<modDesc descVersion="105">
+    <author>PanikHuhn</author>
+    <version>0.0.1.0</version>
+
+    <title>
+        <en>Terraform Plus</en>
+        <de>Terraform Plus</de>
+    </title>
+
+    <description>
+        <en><![CDATA[Terraform Plus - early development version. Initial loading test only; no terrain changes yet.]]></en>
+        <de><![CDATA[Terraform Plus - frühe Entwicklungsversion. Derzeit nur ein Ladetest; noch keine Geländeänderungen.]]></de>
+    </description>
+
+    <iconFilename>icon.png</iconFilename>
+    <multiplayer supported="false"/>
+
+    <extraSourceFiles>
+        <sourceFile filename="scripts/TerraformPlus.lua"/>
+    </extraSourceFiles>
+</modDesc>
