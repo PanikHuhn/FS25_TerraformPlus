@@ -1,10 +1,10 @@
-
 -- Terraform Plus
--- Version: 0.0.4.0
+-- Version: 0.0.5.0
+-- Terrain measurement and profile analysis
 
 TerraformPlus = TerraformPlus or {}
 
-TerraformPlus.VERSION = "0.0.4.0"
+TerraformPlus.VERSION = "0.0.5.0"
 
 TerraformPlus.COMMANDS = {
     "tpHeight",
@@ -12,11 +12,12 @@ TerraformPlus.COMMANDS = {
     "tpSetB",
     "tpMeasure",
     "tpClear",
-    "tpVisual"
+    "tpVisual",
+    "tpProfile"
 }
 
 
--- Formatiert die Terrainhoehe.
+-- Formatiert eine einzelne Gelaendehoehe.
 function TerraformPlus:formatHeight(sample)
 
     return string.format(
@@ -28,11 +29,12 @@ function TerraformPlus:formatHeight(sample)
 end
 
 
--- Fragt den TerrainAdapter sicher ab.
+-- Ermittelt aktuelle Spielerposition und Terrainhoehe.
 function TerraformPlus:getCurrentSample()
 
     if TerrainAdapter == nil
-        or type(TerrainAdapter.getHeightAtPlayer) ~= "function" then
+        or type(TerrainAdapter.getHeightAtPlayer)
+            ~= "function" then
 
         return nil, "TerrainAdapter nicht verfuegbar"
     end
@@ -46,14 +48,16 @@ function TerraformPlus:getCurrentSample()
     end
 
     if sample == nil then
-        return nil, tostring(err or "Unbekannter Fehler")
+        return nil, tostring(
+            err or "Unbekannter Fehler"
+        )
     end
 
     return sample, nil
 end
 
 
--- Berechnet Entfernung, Hoehenunterschied und Steigung.
+-- Berechnet Entfernung und Steigung zwischen A und B.
 function TerraformPlus:calculateSlope(pointA, pointB)
 
     local dx = pointB.x - pointA.x
@@ -86,7 +90,7 @@ function TerraformPlus:calculateSlope(pointA, pointB)
 end
 
 
--- Erzeugt eine Kopie der Messwerte.
+-- Erstellt eine unabhaengige Kopie eines Messpunkts.
 function TerraformPlus:createPoint(sample)
 
     return {
@@ -97,17 +101,20 @@ function TerraformPlus:createPoint(sample)
 end
 
 
--- Beim Laden einer Karte.
+-- Wird beim Laden der Karte ausgefuehrt.
 function TerraformPlus:loadMap()
 
+    -- Messdaten initialisieren
     self.pointA = nil
     self.pointB = nil
     self.measurement = nil
+    self.profile = nil
 
     -- Visualisierung standardmaessig aktivieren
     self.visualEnabled = true
     self.commandsRegistered = false
 
+    -- Konsolenbefehle registrieren
     addConsoleCommand(
         "tpHeight",
         "Zeigt die aktuelle Gelaendehoehe",
@@ -150,6 +157,13 @@ function TerraformPlus:loadMap()
         self
     )
 
+    addConsoleCommand(
+        "tpProfile",
+        "Zeigt die Analyse des Gelaendeprofils",
+        "consoleCommandProfile",
+        self
+    )
+
     self.commandsRegistered = true
 
     print(
@@ -158,10 +172,11 @@ function TerraformPlus:loadMap()
     )
 
     print("[Terraform Plus] TerrainVisualizer bereit")
+    print("[Terraform Plus] TerrainProfile bereit")
 end
 
 
--- Zeichnet die Visualisierung in jedem Renderzyklus.
+-- Wird durch die GIANTS Engine beim Zeichnen aufgerufen.
 function TerraformPlus:draw()
 
     if not self.visualEnabled then
@@ -184,13 +199,13 @@ function TerraformPlus:draw()
         return
     end
 
-    -- Renderfehler abfangen, damit sie nicht dauerhaft
-    -- in jedem einzelnen Frame auftreten.
+    -- Renderfehler abfangen
     local success, err = pcall(
         TerrainVisualizer.draw,
         self.pointA,
         self.pointB,
-        self.measurement
+        self.measurement,
+        self.profile
     )
 
     if not success then
@@ -205,7 +220,7 @@ function TerraformPlus:draw()
 end
 
 
--- tpHeight: Aktuelle Terrainhoehe auslesen.
+-- Konsolenbefehl: tpHeight
 function TerraformPlus:consoleCommandHeight()
 
     local sample, err = self:getCurrentSample()
@@ -218,7 +233,7 @@ function TerraformPlus:consoleCommandHeight()
 end
 
 
--- tpSetA: Startpunkt festlegen.
+-- Konsolenbefehl: tpSetA
 function TerraformPlus:consoleCommandSetA()
 
     local sample, err = self:getCurrentSample()
@@ -227,11 +242,13 @@ function TerraformPlus:consoleCommandSetA()
         return "[Terraform Plus] Fehler: " .. err
     end
 
+    -- Startpunkt speichern
     self.pointA = self:createPoint(sample)
 
-    -- Alten Endpunkt und alte Messung verwerfen
+    -- Alte Messungen entfernen
     self.pointB = nil
     self.measurement = nil
+    self.profile = nil
 
     return string.format(
         "[Terraform Plus] Punkt A gesetzt: X=%.2f Z=%.2f H=%.3f m",
@@ -242,10 +259,11 @@ function TerraformPlus:consoleCommandSetA()
 end
 
 
--- tpSetB: Endpunkt festlegen.
+-- Konsolenbefehl: tpSetB
 function TerraformPlus:consoleCommandSetB()
 
     if self.pointA == nil then
+
         return "[Terraform Plus] Zuerst Punkt A mit tpSetA setzen"
     end
 
@@ -255,19 +273,63 @@ function TerraformPlus:consoleCommandSetB()
         return "[Terraform Plus] Fehler: " .. err
     end
 
+    -- Endpunkt speichern
     self.pointB = self:createPoint(sample)
 
-    -- Messergebnis direkt aktualisieren
-    local result, calculationError = self:calculateSlope(
-        self.pointA,
-        self.pointB
-    )
+    -- Alte Ergebnisse entfernen
+    self.measurement = nil
+    self.profile = nil
+
+    -- Steigung zwischen A und B berechnen
+    local result, calculationError =
+        self:calculateSlope(
+            self.pointA,
+            self.pointB
+        )
 
     self.measurement = result
 
     if result == nil then
-        return "[Terraform Plus] Punkt B gesetzt, Messung nicht moeglich: "
+
+        return "[Terraform Plus] Punkt B gesetzt, Fehler: "
             .. calculationError
+    end
+
+    -- Neues Gelaendeprofil berechnen
+    if TerrainProfile ~= nil
+        and type(TerrainProfile.build) == "function" then
+
+        local success, profile, profileError = pcall(
+            TerrainProfile.build,
+            self.pointA,
+            self.pointB
+        )
+
+        if success and profile ~= nil then
+
+            self.profile = profile
+
+            print(string.format(
+                "[Terraform Plus] Terrainprofil: %d Samples",
+                #profile.samples
+            ))
+
+        else
+
+            local errorMessage =
+                success and profileError or profile
+
+            print(
+                "[Terraform Plus] Profilberechnung fehlgeschlagen: "
+                .. tostring(errorMessage)
+            )
+        end
+
+    else
+
+        print(
+            "[Terraform Plus] TerrainProfile nicht geladen"
+        )
     end
 
     return string.format(
@@ -279,10 +341,11 @@ function TerraformPlus:consoleCommandSetB()
 end
 
 
--- tpMeasure: Aktuelles Messergebnis ausgeben.
+-- Konsolenbefehl: tpMeasure
 function TerraformPlus:consoleCommandMeasure()
 
     if self.pointA == nil or self.pointB == nil then
+
         return "[Terraform Plus] Beide Messpunkte muessen gesetzt sein"
     end
 
@@ -295,6 +358,7 @@ function TerraformPlus:consoleCommandMeasure()
         return "[Terraform Plus] Fehler: " .. err
     end
 
+    -- Ergebnis aktualisieren
     self.measurement = result
 
     return string.format(
@@ -307,23 +371,49 @@ function TerraformPlus:consoleCommandMeasure()
 end
 
 
--- tpClear: Messpunkte entfernen.
+-- Konsolenbefehl: tpProfile
+function TerraformPlus:consoleCommandProfile()
+
+    if self.profile == nil then
+
+        return "[Terraform Plus] Kein Profil vorhanden. tpSetA und tpSetB verwenden"
+    end
+
+    local p = self.profile
+
+    return string.format(
+        "[Terraform Plus] PROFIL | Samples=%d | Schritt=%.2f m | Min=%.3f m | Max=%.3f m | Ueber=+%.3f m | Unter=%.3f m | MaxAbweichung=%.3f m | SteilsterAbschnitt=%+.2f%%",
+        #p.samples,
+        p.step,
+        p.minHeight,
+        p.maxHeight,
+        p.maxAbove,
+        p.maxBelow,
+        p.maxAbsDeviation,
+        p.steepestSegment
+    )
+end
+
+
+-- Konsolenbefehl: tpClear
 function TerraformPlus:consoleCommandClear()
 
     self.pointA = nil
     self.pointB = nil
     self.measurement = nil
+    self.profile = nil
 
     return "[Terraform Plus] Messpunkte geloescht"
 end
 
 
--- tpVisual: Anzeige aktivieren/deaktivieren.
+-- Konsolenbefehl: tpVisual
 function TerraformPlus:consoleCommandVisual()
 
     self.visualEnabled = not self.visualEnabled
 
     if self.visualEnabled then
+
         return "[Terraform Plus] Visualisierung aktiviert"
     end
 
@@ -331,26 +421,30 @@ function TerraformPlus:consoleCommandVisual()
 end
 
 
--- Beim Verlassen der Karte.
+-- Wird beim Verlassen der Karte ausgefuehrt.
 function TerraformPlus:deleteMap()
 
+    -- Alle Befehle entfernen
     if self.commandsRegistered then
 
         for _, command in ipairs(self.COMMANDS) do
+
             removeConsoleCommand(command)
         end
 
         self.commandsRegistered = false
     end
 
+    -- Gespeicherte Daten zuruecksetzen
     self.pointA = nil
     self.pointB = nil
     self.measurement = nil
+    self.profile = nil
     self.visualEnabled = false
 
     print("[Terraform Plus] Karte entladen")
 end
 
 
--- GIANTS-Engine-Eventlistener
+-- Mod bei der GIANTS Engine registrieren
 addModEventListener(TerraformPlus)

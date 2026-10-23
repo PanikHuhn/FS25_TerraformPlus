@@ -1,7 +1,9 @@
+
 <?xml version="1.0" encoding="utf-8"?>
 <modDesc descVersion="105">
+
     <author>PanikHuhn</author>
-    <version>0.0.4.0</version>
+    <version>0.0.5.0</version>
 
     <title>
         <en>Terraform Plus</en>
@@ -9,16 +11,42 @@
     </title>
 
     <description>
-        <en><![CDATA[Terraform Plus - early development version. Initial loading test only; no terrain changes yet.]]></en>
-        <de><![CDATA[Terraform Plus - frühe Entwicklungsversion. Derzeit nur ein Ladetest; noch keine Geländeänderungen.]]></de>
+        <en>
+            <![CDATA[
+            Terraform Plus - Terrain measurement and profile analysis.
+
+            Features:
+            - Terrain height measurement
+            - Two-point slope measurement
+            - Terrain profile analysis
+            - Visual markers and reference lines
+            - Read-only terrain analysis
+            ]]>
+        </en>
+
+        <de>
+            <![CDATA[
+            Terraform Plus - Gelaendehoehenmessung und Profilanalyse.
+
+            Funktionen:
+            - Messung der Gelaendehoehe
+            - Steigungsmessung zwischen zwei Punkten
+            - Analyse des Gelaendeprofils
+            - Visuelle Markierungen und Referenzlinien
+            - Keine Veraenderung des Gelaendes
+            ]]>
+        </de>
     </description>
 
     <iconFilename>icon.png</iconFilename>
+
     <multiplayer supported="false"/>
 
     <extraSourceFiles>
         <sourceFile filename="scripts/TerrainAdapter.lua"/>
+        <sourceFile filename="scripts/TerrainProfile.lua"/>
         <sourceFile filename="scripts/TerrainVisualizer.lua"/>
         <sourceFile filename="scripts/TerraformPlus.lua"/>
     </extraSourceFiles>
+
 </modDesc>
