@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <modDesc descVersion="105">
     <author>PanikHuhn</author>
-    <version>0.0.1.0</version>
+    <version>0.0.2.1</version>
 
     <title>
         <en>Terraform Plus</en>
@@ -17,6 +17,7 @@
     <multiplayer supported="false"/>
 
     <extraSourceFiles>
+        <sourceFile filename="scripts/TerrainAdapter.lua"/>
         <sourceFile filename="scripts/TerraformPlus.lua"/>
     </extraSourceFiles>
 </modDesc>

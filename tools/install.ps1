@@ -19,7 +19,7 @@ if (-not (Test-Path -LiteralPath $mods -PathType Container)) {
 # Pruefen, ob alle notwendigen Quelldateien existieren
 $required = @(
     'modDesc.xml'
-    'icon.dds'
+    'icon.png'
     'scripts'
 )
 
@@ -45,7 +45,7 @@ if (Test-Path -LiteralPath $targetScripts) {
 Copy-Item -LiteralPath (Join-Path $repo 'modDesc.xml') `
     -Destination $target -Force
 
-Copy-Item -LiteralPath (Join-Path $repo 'icon.dds') `
+Copy-Item -LiteralPath (Join-Path $repo 'icon.png') `
     -Destination $target -Force
 
 Copy-Item -LiteralPath (Join-Path $repo 'scripts') `
