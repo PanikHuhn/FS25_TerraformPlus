@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <modDesc descVersion="105">
     <author>PanikHuhn</author>
-    <version>0.0.15.0</version>
+    <version>0.0.16.0</version>
 
     <title>
         <en>Terraform Plus</en>
@@ -9,8 +9,18 @@
     </title>
 
     <description>
-        <en><![CDATA[Terraform Plus - terrain planning, capped frame-batched edits, progress, cancellation and undo/redo. Singleplayer development only.]]></en>
-        <de><![CDATA[Terraform Plus - Gelaendeplanung, begrenzte schrittweise Bearbeitung, Fortschritt, Abbruch und Ruecknahme. Nur fuer Einzelspieler-Testspielstaende.]]></de>
+        <en><![CDATA[
+Terraform Plus - terrain design, controlled batch editing,
+undo/redo, neighboring terrain verification,
+unified interface and experimental save protection.
+Singleplayer development only.
+        ]]></en>
+        <de><![CDATA[
+Terraform Plus - Gelaendeplanung, kontrollierte Batch-Bearbeitung,
+Undo/Redo, Nachbarschaftspruefung, vereinheitlichte
+Benutzeroberflaeche und experimenteller Speicherschutz.
+Nur fuer Einzelspieler-Testspielstaende.
+        ]]></de>
     </description>
 
     <iconFilename>icon.png</iconFilename>
@@ -79,5 +89,6 @@
         <sourceFile filename="scripts/TerraformPlusUIBridge.lua"/>
         <sourceFile filename="scripts/TerrainWriter.lua"/>
         <sourceFile filename="scripts/TerrainBatch.lua"/>
+        <sourceFile filename="scripts/TerrainStability.lua"/>
     </extraSourceFiles>
 </modDesc>

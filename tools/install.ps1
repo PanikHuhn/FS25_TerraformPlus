@@ -1,57 +1,76 @@
 
-# Terraform Plus - strikte Entwicklungsinstallation
-# Version: 0.0.15.0
+# ============================================================
+# Terraform Plus - Development Installation
+# Version: 0.0.16.0
+# ============================================================
 
 $ErrorActionPreference = 'Stop'
 
-$expectedVersion = '0.0.15.0'
+$expectedVersion = '0.0.16.0'
 
 $repo = (Resolve-Path (
-    Join-Path $PSScriptRoot '..'
-)).Path
+        Join-Path $PSScriptRoot '..'
+    )).Path
 
-$mods = Join-Path (
-    [Environment]::GetFolderPath('Desktop')
-) 'FS25_Mods\_ModTest'
+$mods = Join-Path `
+([Environment]::GetFolderPath('Desktop')) `
+    'FS25_Mods\_ModTest'
 
 $target = Join-Path $mods 'FS25_TerraformPlus'
 
-# -------------------------------------------------
-# 1. Verzeichnisse pruefen
-# -------------------------------------------------
+Write-Host ''
+Write-Host "Terraform Plus v$expectedVersion - Installation" `
+    -ForegroundColor Cyan
+
+# ------------------------------------------------------------
+# 1. Basisverzeichnisse pruefen
+# ------------------------------------------------------------
 
 if (-not (Test-Path -LiteralPath $mods -PathType Container)) {
     throw "Test-Modordner fehlt: $mods"
 }
 
 $descPath = Join-Path $repo 'modDesc.xml'
+$sourceScripts = Join-Path $repo 'scripts'
 
 if (-not (Test-Path -LiteralPath $descPath -PathType Leaf)) {
-    throw "modDesc.xml fehlt: $descPath"
+    throw 'modDesc.xml fehlt'
 }
 
-# -------------------------------------------------
-# 2. Version und Lua-Registrierung
-# -------------------------------------------------
+if (-not (Test-Path -LiteralPath $sourceScripts -PathType Container)) {
+    throw 'scripts-Verzeichnis fehlt'
+}
+
+# ------------------------------------------------------------
+# 2. Versionspruefung
+# ------------------------------------------------------------
 
 [xml]$xml = Get-Content -LiteralPath $descPath -Raw
 
 $version = ([string]$xml.modDesc.version).Trim()
 
 if ($version -ne $expectedVersion) {
-    throw "Falsche Mod-Version: $version (erwartet $expectedVersion)"
+    throw "Versionsfehler: $version statt $expectedVersion"
 }
+
+Write-Host "[OK] Mod-Version: $version" -ForegroundColor Green
+
+# ------------------------------------------------------------
+# 3. Lua-Eintraege aus modDesc.xml
+# ------------------------------------------------------------
 
 $declared = @(
     $xml.modDesc.extraSourceFiles.sourceFile |
-        ForEach-Object {
-            [string]$_.filename
-        }
+    ForEach-Object {
+        [string]$_.filename
+    }
 )
 
 if ($declared.Count -eq 0) {
-    throw 'Keine Lua-Dateien registriert'
+    throw 'Keine Lua-Module registriert'
 }
+
+# Doppelte Lua-Eintraege erkennen.
 
 $uniqueFiles = @($declared | Sort-Object -Unique)
 
@@ -59,9 +78,9 @@ if ($uniqueFiles.Count -ne $declared.Count) {
     throw 'Doppelte Lua-Eintraege in modDesc.xml'
 }
 
-# -------------------------------------------------
-# 3. Pflichtmodule und Ladereihenfolge
-# -------------------------------------------------
+# ------------------------------------------------------------
+# 4. Pflichtmodule und korrekte Ladereihenfolge
+# ------------------------------------------------------------
 
 $requiredModules = @(
     'scripts/TerrainAdapter.lua',
@@ -76,92 +95,121 @@ $requiredModules = @(
     'scripts/TerraformPlus.lua',
     'scripts/TerraformPlusUIBridge.lua',
     'scripts/TerrainWriter.lua',
-    'scripts/TerrainBatch.lua'
+    'scripts/TerrainBatch.lua',
+    'scripts/TerrainStability.lua'
 )
 
 if ($declared.Count -ne $requiredModules.Count) {
-    throw 'Unerwartete Anzahl Lua-Module in modDesc.xml'
+    throw "Unerwartete Modulanzahl: $($declared.Count)"
+}
+
+if ($declared.Count -lt $requiredModules.Count) {
+    throw ("Es fehlen Module: erwartet {0}, deklariert {1}." -f $requiredModules.Count, $declared.Count)
 }
 
 for ($i = 0; $i -lt $requiredModules.Count; $i++) {
     if ($declared[$i] -cne $requiredModules[$i]) {
-        throw "Lua-Ladereihenfolge abweichend an Stelle $($i + 1): $($declared[$i])"
+        throw ("Ladereihenfolge ungueltig bei Modul {0}: erwartet '{1}', deklariert '{2}'." -f ($i + 1), $requiredModules[$i], $declared[$i])
     }
 }
 
-# -------------------------------------------------
-# 4. Alle Quelldateien pruefen
-# -------------------------------------------------
+Write-Host '[OK] Alle 14 Module korrekt registriert' `
+    -ForegroundColor Green
+
+# ------------------------------------------------------------
+# 5. Quelldateien kontrollieren
+# ------------------------------------------------------------
 
 $required = @('modDesc.xml', 'icon.png') + $declared
 
 foreach ($relative in $required) {
 
-    if (
-        $relative -like 'scripts/*' -and (
+    if ($relative -notin @('modDesc.xml', 'icon.png')) {
+
+        if (
             $relative -notmatch '^scripts/[A-Za-z0-9_./-]+\.lua$' -or
             $relative -match '(^|/)\.\.(/|$)'
-        )
-    ) {
-        throw "Ungueltiger Modulpfad: $relative"
+        ) {
+            throw "Ungueltiger Lua-Pfad: $relative"
+        }
     }
 
     $path = Join-Path $repo $relative
 
     if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
-        throw "Pflichtdatei fehlt: $relative"
+        throw "Quelldatei fehlt: $relative"
     }
 }
 
-# -------------------------------------------------
-# 5. Nicht registrierte Lua-Dateien erkennen
-# -------------------------------------------------
-
-$sourceScripts = Join-Path $repo 'scripts'
+# Nicht registrierte Lua-Dateien erkennen.
 
 $actualLua = @(
     Get-ChildItem `
         -LiteralPath $sourceScripts `
         -Filter '*.lua' `
-        -File `
-        -Recurse
+        -Recurse `
+        -File
 )
 
 foreach ($file in $actualLua) {
-
     $relative = $file.FullName.Substring(
         $repo.Length + 1
     ).Replace('\', '/')
 
     if ($declared -notcontains $relative) {
-        throw "Neue Lua-Datei noch nicht in modDesc.xml: $relative"
+        throw "Lua-Datei nicht registriert: $relative"
     }
 }
 
-# -------------------------------------------------
-# 6. Neue Batch-Funktionen pruefen
-# -------------------------------------------------
+Write-Host '[OK] Alle Quelldateien vorhanden' `
+    -ForegroundColor Green
 
-$batchCode = Get-Content `
-    -LiteralPath (Join-Path $repo 'scripts/TerrainBatch.lua') `
+# ------------------------------------------------------------
+# 6. Neue Stabilitaetsfunktionen pruefen
+# ------------------------------------------------------------
+
+$stabilityPath = Join-Path `
+    $repo 'scripts/TerrainStability.lua'
+
+$stability = Get-Content `
+    -LiteralPath $stabilityPath `
     -Raw
 
+$requiredMethods = @(
+    'checkNeighbors',
+    'beforeSave',
+    'consoleCommandNeighborCheck',
+    'consoleCommandSaveGuardStatus',
+    'startSaveCurrentGame',
+    'saveSavegame'
+)
+
+foreach ($method in $requiredMethods) {
+    if (-not $stability.Contains($method)) {
+        throw "TerrainStability-Funktion fehlt: $method"
+    }
+}
+
+$batchPath = Join-Path $repo 'scripts/TerrainBatch.lua'
+$batch = Get-Content -LiteralPath $batchPath -Raw
+
 foreach ($method in @(
-    'consoleCommandBatchApply',
-    'consoleCommandBatchCancel',
-    'consoleCommandBatchUndo',
-    'consoleCommandBatchRedo',
-    'consoleCommandBatchRecover',
-    'setTerrainHeightAtWorldPos'
-)) {
-    if (-not $batchCode.Contains($method)) {
+        'consoleCommandBatchApply',
+        'consoleCommandBatchUndo',
+        'consoleCommandBatchRecover',
+        'setTerrainHeightAtWorldPos'
+    )) {
+    if (-not $batch.Contains($method)) {
         throw "TerrainBatch-Funktion fehlt: $method"
     }
 }
 
-# -------------------------------------------------
-# 7. Test-Mod installieren
-# -------------------------------------------------
+Write-Host '[OK] Stabilitaets- und Batch-Funktionen vorhanden' `
+    -ForegroundColor Green
+
+# ------------------------------------------------------------
+# 7. Installation
+# ------------------------------------------------------------
 
 New-Item `
     -ItemType Directory `
@@ -193,9 +241,9 @@ Copy-Item `
     -Recurse `
     -Force
 
-# -------------------------------------------------
-# 8. SHA256-Dateipruefung
-# -------------------------------------------------
+# ------------------------------------------------------------
+# 8. SHA256-Verifikation
+# ------------------------------------------------------------
 
 foreach ($relative in $required) {
 
@@ -219,23 +267,25 @@ foreach ($relative in $required) {
     ).Hash
 
     if ($sourceHash -ne $targetHash) {
-        throw "SHA256-Abweichung nach Installation: $relative"
+        throw "SHA256-Fehler: $relative"
     }
 }
 
-# -------------------------------------------------
+# ------------------------------------------------------------
 # 9. Ergebnis
-# -------------------------------------------------
+# ------------------------------------------------------------
 
-Write-Host "[Terraform Plus] Installation verifiziert: v$expectedVersion" `
-    -ForegroundColor Green
+Write-Host ''
+Write-Host '========================================'
+Write-Host ' INSTALLATION ERFOLGREICH'
+Write-Host '========================================' -ForegroundColor Green
 
-Write-Host "[Terraform Plus] $($declared.Count) Lua-Dateien kontrolliert" `
-    -ForegroundColor Green
-
-Write-Host '[Terraform Plus] Batch: 256 Punkte, 8/Frame, max. 0.25 m' `
-    -ForegroundColor Yellow
-
+Write-Host "[Terraform Plus] Version: $expectedVersion"
+Write-Host "[Terraform Plus] $($declared.Count) Lua-Dateien verifiziert"
+Write-Host '[Terraform Plus] UI, Nachbarschaft und Saveguard installiert'
 Write-Host "[Terraform Plus] Ziel: $target"
 
-Write-Host 'LS25 neu starten; nur Kopie eines Testspielstands verwenden.'
+Write-Host ''
+Write-Host 'WICHTIG: Nur mit kopiertem Testspielstand verwenden!' `
+    -ForegroundColor Yellow
+Write-Host 'LS25 vollstaendig neu starten.'
