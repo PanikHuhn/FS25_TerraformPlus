@@ -1,73 +1,46 @@
 
-# ============================================================
-# Terraform Plus - Development Installation
-# Version: 0.0.14.0
-#
-# Funktionen:
-# - Versionspruefung
-# - Pruefung aller benoetigten Dateien
-# - Erkennung doppelter Lua-Eintraege
-# - Kontrolle der Lua-Ladereihenfolge
-# - Erkennung nicht registrierter Lua-Dateien
-# - Pruefung der TerrainWriter-Funktionen
-# - Installation in den Test-Modordner
-# - SHA256-Verifikation aller kopierten Dateien
-# ============================================================
+# Terraform Plus - strikte Entwicklungsinstallation
+# Version: 0.0.15.0
 
 $ErrorActionPreference = 'Stop'
 
-# ------------------------------------------------------------
-# 1. Verzeichnisse und Version
-# ------------------------------------------------------------
+$expectedVersion = '0.0.15.0'
 
-$repo = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+$repo = (Resolve-Path (
+    Join-Path $PSScriptRoot '..'
+)).Path
 
-$mods = Join-Path `
-    ([Environment]::GetFolderPath('Desktop')) `
-    'FS25_Mods\_ModTest'
+$mods = Join-Path (
+    [Environment]::GetFolderPath('Desktop')
+) 'FS25_Mods\_ModTest'
 
 $target = Join-Path $mods 'FS25_TerraformPlus'
 
-$expectedVersion = '0.0.14.0'
-
-Write-Host ''
-Write-Host '========================================'
-Write-Host ' Terraform Plus - Mod Installation'
-Write-Host " Version: $expectedVersion"
-Write-Host '========================================'
-Write-Host ''
-
-# ------------------------------------------------------------
-# 2. Test-Modverzeichnis pruefen
-# ------------------------------------------------------------
+# -------------------------------------------------
+# 1. Verzeichnisse pruefen
+# -------------------------------------------------
 
 if (-not (Test-Path -LiteralPath $mods -PathType Container)) {
-    throw "Test-Modverzeichnis fehlt: $mods"
+    throw "Test-Modordner fehlt: $mods"
 }
 
-# ------------------------------------------------------------
-# 3. modDesc.xml pruefen
-# ------------------------------------------------------------
+$descPath = Join-Path $repo 'modDesc.xml'
 
-$descFile = Join-Path $repo 'modDesc.xml'
-
-if (-not (Test-Path -LiteralPath $descFile -PathType Leaf)) {
-    throw "modDesc.xml fehlt: $descFile"
+if (-not (Test-Path -LiteralPath $descPath -PathType Leaf)) {
+    throw "modDesc.xml fehlt: $descPath"
 }
 
-[xml]$xml = Get-Content -LiteralPath $descFile -Raw
+# -------------------------------------------------
+# 2. Version und Lua-Registrierung
+# -------------------------------------------------
+
+[xml]$xml = Get-Content -LiteralPath $descPath -Raw
 
 $version = ([string]$xml.modDesc.version).Trim()
 
 if ($version -ne $expectedVersion) {
-    throw "Versionsfehler: $version statt $expectedVersion"
+    throw "Falsche Mod-Version: $version (erwartet $expectedVersion)"
 }
-
-Write-Host "[OK] Mod-Version: $version" -ForegroundColor Green
-
-# ------------------------------------------------------------
-# 4. Registrierte Lua-Dateien auslesen
-# ------------------------------------------------------------
 
 $declared = @(
     $xml.modDesc.extraSourceFiles.sourceFile |
@@ -77,12 +50,8 @@ $declared = @(
 )
 
 if ($declared.Count -eq 0) {
-    throw 'Keine Lua-Module in modDesc.xml registriert'
+    throw 'Keine Lua-Dateien registriert'
 }
-
-# ------------------------------------------------------------
-# 5. Doppelte Lua-Eintraege erkennen
-# ------------------------------------------------------------
 
 $uniqueFiles = @($declared | Sort-Object -Unique)
 
@@ -90,12 +59,9 @@ if ($uniqueFiles.Count -ne $declared.Count) {
     throw 'Doppelte Lua-Eintraege in modDesc.xml'
 }
 
-Write-Host '[OK] Keine doppelten Lua-Eintraege' `
-    -ForegroundColor Green
-
-# ------------------------------------------------------------
-# 6. Pflichtmodule
-# ------------------------------------------------------------
+# -------------------------------------------------
+# 3. Pflichtmodule und Ladereihenfolge
+# -------------------------------------------------
 
 $requiredModules = @(
     'scripts/TerrainAdapter.lua',
@@ -109,137 +75,93 @@ $requiredModules = @(
     'scripts/TerrainToolUI.lua',
     'scripts/TerraformPlus.lua',
     'scripts/TerraformPlusUIBridge.lua',
-    'scripts/TerrainWriter.lua'
+    'scripts/TerrainWriter.lua',
+    'scripts/TerrainBatch.lua'
 )
 
-foreach ($item in $requiredModules) {
-    if ($declared -notcontains $item) {
-        throw "Pflichtmodul fehlt in modDesc.xml: $item"
+if ($declared.Count -ne $requiredModules.Count) {
+    throw 'Unerwartete Anzahl Lua-Module in modDesc.xml'
+}
+
+for ($i = 0; $i -lt $requiredModules.Count; $i++) {
+    if ($declared[$i] -cne $requiredModules[$i]) {
+        throw "Lua-Ladereihenfolge abweichend an Stelle $($i + 1): $($declared[$i])"
     }
 }
 
-Write-Host '[OK] Alle Pflichtmodule registriert' `
-    -ForegroundColor Green
+# -------------------------------------------------
+# 4. Alle Quelldateien pruefen
+# -------------------------------------------------
 
-# ------------------------------------------------------------
-# 7. Ladereihenfolge pruefen
-# ------------------------------------------------------------
-
-# Die erforderlichen Module muessen in dieser Reihenfolge
-# geladen werden. Weitere Module duerfen dazwischen liegen.
-
-$lastIndex = -1
-
-foreach ($module in $requiredModules) {
-    $currentIndex = [array]::IndexOf($declared, $module)
-
-    if ($currentIndex -le $lastIndex) {
-        throw "Ungueltige Lua-Ladereihenfolge bei: $module"
-    }
-
-    $lastIndex = $currentIndex
-}
-
-Write-Host '[OK] Lua-Ladereihenfolge korrekt' `
-    -ForegroundColor Green
-
-# ------------------------------------------------------------
-# 8. Vorhandensein der Quelldateien pruefen
-# ------------------------------------------------------------
-
-$required = @(
-    'modDesc.xml',
-    'icon.png'
-) + $declared
+$required = @('modDesc.xml', 'icon.png') + $declared
 
 foreach ($relative in $required) {
 
-    # Nur Lua-Dateien aus dem scripts-Verzeichnis erlauben.
-    if ($relative -ne 'modDesc.xml' -and
-        $relative -ne 'icon.png') {
-
-        if ($relative -notmatch '^scripts/[A-Za-z0-9_./-]+\.lua$' -or
-            $relative -match '(^|/)\.\.(/|$)') {
-
-            throw "Ungueltiger Lua-Dateipfad: $relative"
-        }
+    if (
+        $relative -like 'scripts/*' -and (
+            $relative -notmatch '^scripts/[A-Za-z0-9_./-]+\.lua$' -or
+            $relative -match '(^|/)\.\.(/|$)'
+        )
+    ) {
+        throw "Ungueltiger Modulpfad: $relative"
     }
 
     $path = Join-Path $repo $relative
 
     if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
-        throw "Pflichtdatei fehlt: $path"
+        throw "Pflichtdatei fehlt: $relative"
     }
 }
 
-Write-Host '[OK] Alle Quelldateien vorhanden' `
-    -ForegroundColor Green
+# -------------------------------------------------
+# 5. Nicht registrierte Lua-Dateien erkennen
+# -------------------------------------------------
 
-# ------------------------------------------------------------
-# 9. Nicht registrierte Lua-Dateien erkennen
-# ------------------------------------------------------------
+$sourceScripts = Join-Path $repo 'scripts'
 
-$scriptsFolder = Join-Path $repo 'scripts'
-
-if (-not (Test-Path -LiteralPath $scriptsFolder -PathType Container)) {
-    throw "Scripts-Verzeichnis fehlt: $scriptsFolder"
-}
-
-$luaFiles = @(
+$actualLua = @(
     Get-ChildItem `
-        -LiteralPath $scriptsFolder `
-        -Recurse `
+        -LiteralPath $sourceScripts `
+        -Filter '*.lua' `
         -File `
-        -Filter '*.lua'
+        -Recurse
 )
 
-foreach ($file in $luaFiles) {
+foreach ($file in $actualLua) {
 
     $relative = $file.FullName.Substring(
         $repo.Length + 1
     ).Replace('\', '/')
 
     if ($declared -notcontains $relative) {
-        throw "Lua-Datei nicht in modDesc.xml registriert: $relative"
+        throw "Neue Lua-Datei noch nicht in modDesc.xml: $relative"
     }
 }
 
-Write-Host '[OK] Alle Lua-Dateien in modDesc.xml registriert' `
-    -ForegroundColor Green
+# -------------------------------------------------
+# 6. Neue Batch-Funktionen pruefen
+# -------------------------------------------------
 
-# ------------------------------------------------------------
-# 10. TerrainWriter-Funktionen pruefen
-# ------------------------------------------------------------
+$batchCode = Get-Content `
+    -LiteralPath (Join-Path $repo 'scripts/TerrainBatch.lua') `
+    -Raw
 
-$writerPath = Join-Path $repo 'scripts/TerrainWriter.lua'
-
-$writer = Get-Content -LiteralPath $writerPath -Raw
-
-$requiredMethods = @(
-    'consoleCommandTerrainTest',
-    'consoleCommandTerrainUndo',
-    'consoleCommandTerrainRedo',
-    'consoleCommandTerrainStatus',
+foreach ($method in @(
+    'consoleCommandBatchApply',
+    'consoleCommandBatchCancel',
+    'consoleCommandBatchUndo',
+    'consoleCommandBatchRedo',
+    'consoleCommandBatchRecover',
     'setTerrainHeightAtWorldPos'
-)
-
-foreach ($method in $requiredMethods) {
-
-    if (-not $writer.Contains($method)) {
-        throw "TerrainWriter-Methode fehlt: $method"
+)) {
+    if (-not $batchCode.Contains($method)) {
+        throw "TerrainBatch-Funktion fehlt: $method"
     }
 }
 
-Write-Host '[OK] TerrainWriter-Funktionen vorhanden' `
-    -ForegroundColor Green
-
-# ------------------------------------------------------------
-# 11. Zielverzeichnis vorbereiten
-# ------------------------------------------------------------
-
-Write-Host ''
-Write-Host '[INFO] Installation wird gestartet ...' `
-    -ForegroundColor Cyan
+# -------------------------------------------------
+# 7. Test-Mod installieren
+# -------------------------------------------------
 
 New-Item `
     -ItemType Directory `
@@ -248,23 +170,15 @@ New-Item `
 
 $targetScripts = Join-Path $target 'scripts'
 
-# Alte Scripts entfernen, um veraltete Lua-Dateien
-# aus vorherigen Versionen zu vermeiden.
-
 if (Test-Path -LiteralPath $targetScripts) {
-
     Remove-Item `
         -LiteralPath $targetScripts `
         -Recurse `
         -Force
 }
 
-# ------------------------------------------------------------
-# 12. Dateien kopieren
-# ------------------------------------------------------------
-
 Copy-Item `
-    -LiteralPath $descFile `
+    -LiteralPath $descPath `
     -Destination $target `
     -Force
 
@@ -274,21 +188,14 @@ Copy-Item `
     -Force
 
 Copy-Item `
-    -LiteralPath $scriptsFolder `
+    -LiteralPath $sourceScripts `
     -Destination $target `
     -Recurse `
     -Force
 
-Write-Host '[OK] Dateien kopiert' `
-    -ForegroundColor Green
-
-# ------------------------------------------------------------
-# 13. SHA256-Verifikation
-# ------------------------------------------------------------
-
-Write-Host ''
-Write-Host '[INFO] Datei-Integritaet wird geprueft ...' `
-    -ForegroundColor Cyan
+# -------------------------------------------------
+# 8. SHA256-Dateipruefung
+# -------------------------------------------------
 
 foreach ($relative in $required) {
 
@@ -296,7 +203,7 @@ foreach ($relative in $required) {
     $targetPath = Join-Path $target $relative
 
     if (-not (Test-Path -LiteralPath $targetPath -PathType Leaf)) {
-        throw "Installierte Datei fehlt: $targetPath"
+        throw "Installierte Datei fehlt: $relative"
     }
 
     $sourceHash = (
@@ -312,45 +219,23 @@ foreach ($relative in $required) {
     ).Hash
 
     if ($sourceHash -ne $targetHash) {
-        throw "Datei fehlerhaft kopiert: $relative"
+        throw "SHA256-Abweichung nach Installation: $relative"
     }
 }
 
-Write-Host '[OK] SHA256-Pruefung erfolgreich' `
-    -ForegroundColor Green
+# -------------------------------------------------
+# 9. Ergebnis
+# -------------------------------------------------
 
-# ------------------------------------------------------------
-# 14. Installation abgeschlossen
-# ------------------------------------------------------------
-
-Write-Host ''
-Write-Host '========================================'
-Write-Host ' INSTALLATION ERFOLGREICH'
-Write-Host '========================================'
-
-Write-Host "[Terraform Plus] Version: $expectedVersion" `
+Write-Host "[Terraform Plus] Installation verifiziert: v$expectedVersion" `
     -ForegroundColor Green
 
 Write-Host "[Terraform Plus] $($declared.Count) Lua-Dateien kontrolliert" `
     -ForegroundColor Green
 
-Write-Host '[Terraform Plus] Neue Terrain-Befehle:' `
-    -ForegroundColor Cyan
+Write-Host '[Terraform Plus] Batch: 256 Punkte, 8/Frame, max. 0.25 m' `
+    -ForegroundColor Yellow
 
-Write-Host '  tpTerrainTest'
-Write-Host '  tpTerrainUndo'
-Write-Host '  tpTerrainRedo'
-Write-Host '  tpTerrainStatus'
-
-Write-Host ''
 Write-Host "[Terraform Plus] Ziel: $target"
 
-Write-Host ''
-Write-Host 'HINWEIS: Echte Terrain-Schreibtests nur mit' `
-    -ForegroundColor Yellow
-
-Write-Host 'einer Kopie des Testspielstands durchfuehren.' `
-    -ForegroundColor Yellow
-
-Write-Host 'LS25 vollstaendig neu starten.'
-Write-Host ''
+Write-Host 'LS25 neu starten; nur Kopie eines Testspielstands verwenden.'

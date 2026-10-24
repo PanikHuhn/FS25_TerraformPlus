@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <modDesc descVersion="105">
     <author>PanikHuhn</author>
-    <version>0.0.14.0</version>
+    <version>0.0.15.0</version>
 
     <title>
         <en>Terraform Plus</en>
@@ -9,18 +9,8 @@
     </title>
 
     <description>
-        <en><![CDATA[
-Terraform Plus - Terrain analysis, design undo/redo,
-heightmap review and limited real terrain editing
-with terrain undo/redo. Singleplayer development only.
-        ]]></en>
-
-        <de><![CDATA[
-Terraform Plus - Gelaendeanalyse, Soll-Vorschau,
-Pruefplan und begrenzter echter Terrainschreibtest
-mit Terrain-Undo/Redo.
-Nur fuer Einzelspieler-Testspielstaende.
-        ]]></de>
+        <en><![CDATA[Terraform Plus - terrain planning, capped frame-batched edits, progress, cancellation and undo/redo. Singleplayer development only.]]></en>
+        <de><![CDATA[Terraform Plus - Gelaendeplanung, begrenzte schrittweise Bearbeitung, Fortschritt, Abbruch und Ruecknahme. Nur fuer Einzelspieler-Testspielstaende.]]></de>
     </description>
 
     <iconFilename>icon.png</iconFilename>
@@ -31,22 +21,18 @@ Nur fuer Einzelspieler-Testspielstaende.
             <en>Toggle Terraform Plus Selection</en>
             <de>Terraform Plus Auswahl starten</de>
         </text>
-
         <text name="input_TP_TOOL_PLACE">
             <en>Set Terraform Plus Point</en>
             <de>Terraform Plus Messpunkt setzen</de>
         </text>
-
         <text name="input_TP_TOOL_CANCEL">
             <en>Cancel Terraform Plus Selection</en>
             <de>Terraform Plus Auswahl abbrechen</de>
         </text>
-
         <text name="input_TP_TOOL_UI">
             <en>Toggle Terraform Plus UI</en>
             <de>Terraform Plus Werkzeugfenster</de>
         </text>
-
         <text name="input_TP_TOOL_MOUSE">
             <en>Toggle Terraform Plus Mouse Mode</en>
             <de>Terraform Plus Mausmodus</de>
@@ -54,56 +40,28 @@ Nur fuer Einzelspieler-Testspielstaende.
     </l10n>
 
     <actions>
-        <action name="TP_TOOL_SELECT"
-                category="ONFOOT"
-                axisType="HALF"
-                ignoreComboMask="false"/>
-
-        <action name="TP_TOOL_PLACE"
-                category="ONFOOT"
-                axisType="HALF"
-                ignoreComboMask="false"/>
-
-        <action name="TP_TOOL_CANCEL"
-                category="ONFOOT"
-                axisType="HALF"
-                ignoreComboMask="false"/>
-
-        <action name="TP_TOOL_UI"
-                category="ONFOOT"
-                axisType="HALF"
-                ignoreComboMask="false"/>
-
-        <action name="TP_TOOL_MOUSE"
-                category="ONFOOT"
-                axisType="HALF"
-                ignoreComboMask="false"/>
+        <action name="TP_TOOL_SELECT" category="ONFOOT" axisType="HALF" ignoreComboMask="false"/>
+        <action name="TP_TOOL_PLACE" category="ONFOOT" axisType="HALF" ignoreComboMask="false"/>
+        <action name="TP_TOOL_CANCEL" category="ONFOOT" axisType="HALF" ignoreComboMask="false"/>
+        <action name="TP_TOOL_UI" category="ONFOOT" axisType="HALF" ignoreComboMask="false"/>
+        <action name="TP_TOOL_MOUSE" category="ONFOOT" axisType="HALF" ignoreComboMask="false"/>
     </actions>
 
     <inputBinding>
         <actionBinding action="TP_TOOL_SELECT">
-            <binding device="KB_MOUSE_DEFAULT"
-                     input="KEY_lctrl KEY_lalt KEY_t"/>
+            <binding device="KB_MOUSE_DEFAULT" input="KEY_lctrl KEY_lalt KEY_t"/>
         </actionBinding>
-
         <actionBinding action="TP_TOOL_PLACE">
-            <binding device="KB_MOUSE_DEFAULT"
-                     input="KEY_lctrl KEY_lalt KEY_g"/>
+            <binding device="KB_MOUSE_DEFAULT" input="KEY_lctrl KEY_lalt KEY_g"/>
         </actionBinding>
-
         <actionBinding action="TP_TOOL_CANCEL">
-            <binding device="KB_MOUSE_DEFAULT"
-                     input="KEY_lctrl KEY_lalt KEY_x"/>
+            <binding device="KB_MOUSE_DEFAULT" input="KEY_lctrl KEY_lalt KEY_x"/>
         </actionBinding>
-
         <actionBinding action="TP_TOOL_UI">
-            <binding device="KB_MOUSE_DEFAULT"
-                     input="KEY_lctrl KEY_lalt KEY_u"/>
+            <binding device="KB_MOUSE_DEFAULT" input="KEY_lctrl KEY_lalt KEY_u"/>
         </actionBinding>
-
         <actionBinding action="TP_TOOL_MOUSE">
-            <binding device="KB_MOUSE_DEFAULT"
-                     input="KEY_lctrl KEY_lalt KEY_m"/>
+            <binding device="KB_MOUSE_DEFAULT" input="KEY_lctrl KEY_lalt KEY_m"/>
         </actionBinding>
     </inputBinding>
 
@@ -114,14 +72,12 @@ Nur fuer Einzelspieler-Testspielstaende.
         <sourceFile filename="scripts/TerrainVisualizer.lua"/>
         <sourceFile filename="scripts/TerrainCursor.lua"/>
         <sourceFile filename="scripts/TerrainSelection.lua"/>
-
         <sourceFile filename="scripts/TerrainDesign.lua"/>
         <sourceFile filename="scripts/TerrainPlan.lua"/>
         <sourceFile filename="scripts/TerrainToolUI.lua"/>
-
         <sourceFile filename="scripts/TerraformPlus.lua"/>
         <sourceFile filename="scripts/TerraformPlusUIBridge.lua"/>
-
         <sourceFile filename="scripts/TerrainWriter.lua"/>
+        <sourceFile filename="scripts/TerrainBatch.lua"/>
     </extraSourceFiles>
 </modDesc>
