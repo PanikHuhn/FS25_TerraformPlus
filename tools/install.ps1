@@ -1,75 +1,111 @@
-# Terraform Plus - strict development installation
-# Version: 0.0.11.0
+
+# Terraform Plus - strikte Testinstallation
+# Version: 0.0.12.0
 $ErrorActionPreference = 'Stop'
 
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $mods = Join-Path ([Environment]::GetFolderPath('Desktop')) 'FS25_Mods\_ModTest'
 $target = Join-Path $mods 'FS25_TerraformPlus'
-
-$requiredFiles = @(
-    'modDesc.xml', 'icon.png',
-    'scripts/TerrainAdapter.lua',
-    'scripts/TerrainProfile.lua',
-    'scripts/TerrainArea.lua',
-    'scripts/TerrainVisualizer.lua',
-    'scripts/TerrainCursor.lua',
-    'scripts/TerrainSelection.lua',
-    'scripts/TerrainToolUI.lua',
-    'scripts/TerraformPlus.lua',
-    'scripts/TerraformPlusUIBridge.lua'
-)
+$expectedVersion = '0.0.12.0'
 
 if (-not (Test-Path -LiteralPath $mods -PathType Container)) {
-    throw "Test-Modordner fehlt: $mods"
+    throw "Test-Modverzeichnis fehlt: $mods"
 }
 
-foreach ($relative in $requiredFiles) {
-    $path = Join-Path $repo $relative
-    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
-        throw "Pflichtdatei fehlt: $path"
+$desc = Join-Path $repo 'modDesc.xml'
+if (-not (Test-Path -LiteralPath $desc -PathType Leaf)) {
+    throw "modDesc.xml fehlt: $desc"
+}
+[xml]$xml = Get-Content -LiteralPath $desc -Raw
+$version = [string]$xml.modDesc.version
+if ($version.Trim() -ne $expectedVersion) {
+    throw "Versionsfehler: modDesc.xml=$version, erwartet=$expectedVersion"
+}
+
+$required = @('modDesc.xml', 'icon.png')
+$declared = @($xml.modDesc.extraSourceFiles.sourceFile | ForEach-Object {
+    [string]$_.filename
+})
+if ($declared.Count -eq 0) { throw 'Keine Lua-Dateien in modDesc.xml registriert' }
+if (($declared | Select-Object -Unique).Count -ne $declared.Count) {
+    throw 'Doppelte Lua-Eintraege in modDesc.xml'
+}
+
+# Kritische Module muessen vorhanden und in der richtigen Reihenfolge geladen sein.
+$needed = @(
+    'scripts/TerrainAdapter.lua', 'scripts/TerrainProfile.lua',
+    'scripts/TerrainArea.lua', 'scripts/TerrainVisualizer.lua',
+    'scripts/TerrainCursor.lua', 'scripts/TerrainSelection.lua',
+    'scripts/TerrainDesign.lua', 'scripts/TerrainToolUI.lua',
+    'scripts/TerraformPlus.lua', 'scripts/TerraformPlusUIBridge.lua'
+)
+foreach ($relative in $needed) {
+    if ($declared -notcontains $relative) {
+        throw "Pflichtmodul fehlt in modDesc.xml: $relative"
+    }
+}
+$designIndex = [array]::IndexOf($declared,'scripts/TerrainDesign.lua')
+$uiIndex = [array]::IndexOf($declared,'scripts/TerrainToolUI.lua')
+$coreIndex = [array]::IndexOf($declared,'scripts/TerraformPlus.lua')
+$bridgeIndex = [array]::IndexOf($declared,'scripts/TerraformPlusUIBridge.lua')
+if (-not ($designIndex -lt $uiIndex -and $uiIndex -lt $bridgeIndex `
+    -and $coreIndex -lt $bridgeIndex)) {
+    throw 'Ladereihenfolge in modDesc.xml ungueltig'
+}
+
+$required += $declared
+foreach ($relative in $required) {
+    $source = Join-Path $repo $relative
+    if (-not (Test-Path -LiteralPath $source -PathType Leaf)) {
+        throw "Pflichtdatei fehlt: $source"
     }
 }
 
-[xml]$xml = Get-Content -LiteralPath (Join-Path $repo 'modDesc.xml') -Raw
-$version = $xml.modDesc.version.Trim()
-if ($version -ne '0.0.11.0') {
-    throw "Falsche Quellversion: $version (erwartet: 0.0.11.0)"
-}
-
-$described = @($xml.modDesc.extraSourceFiles.sourceFile | ForEach-Object { $_.filename })
-foreach ($relative in ($requiredFiles | Where-Object { $_ -like 'scripts/*' })) {
-    if ($described -notcontains $relative) {
-        throw "Lua-Datei fehlt in modDesc.xml: $relative"
+# Neue Lua-Dateien duerfen nicht stillschweigend vergessen werden.
+$luaFiles = Get-ChildItem -LiteralPath (Join-Path $repo 'scripts') `
+    -Filter '*.lua' -File -Recurse
+foreach ($file in $luaFiles) {
+    $relative = $file.FullName.Substring($repo.Length + 1).Replace('\','/')
+    if ($declared -notcontains $relative) {
+        throw "Neue Lua-Datei noch nicht in modDesc.xml: $relative"
     }
 }
 
-$bridgePath = Join-Path $repo 'scripts/TerraformPlusUIBridge.lua'
-$bridgeCode = Get-Content -LiteralPath $bridgePath -Raw
-foreach ($method in @('consoleCommandUI','consoleCommandUIMouse','onInputUI','onInputMouse')) {
-    if ($bridgeCode -notmatch [regex]::Escape($method)) {
-        throw "UI-Methode nicht in Bridge vorhanden: $method"
+$bridge = Get-Content -LiteralPath `
+    (Join-Path $repo 'scripts/TerraformPlusUIBridge.lua') -Raw
+foreach ($method in @(
+    'consoleCommandUI', 'consoleCommandUIMouse',
+    'consoleCommandChangeLimit', 'consoleCommandDesignCheck'
+)) {
+    if (-not $bridge.Contains($method)) {
+        throw "Methode fehlt in TerraformPlusUIBridge.lua: $method"
     }
 }
 
-New-Item -ItemType Directory -Path $target -Force | Out-Null
+New-Item -Path $target -ItemType Directory -Force | Out-Null
 $targetScripts = Join-Path $target 'scripts'
 if (Test-Path -LiteralPath $targetScripts) {
     Remove-Item -LiteralPath $targetScripts -Recurse -Force
 }
-
-Copy-Item -LiteralPath (Join-Path $repo 'modDesc.xml') -Destination $target -Force
+Copy-Item -LiteralPath $desc -Destination $target -Force
 Copy-Item -LiteralPath (Join-Path $repo 'icon.png') -Destination $target -Force
 Copy-Item -LiteralPath (Join-Path $repo 'scripts') -Destination $target -Recurse -Force
 
-foreach ($relative in $requiredFiles) {
-    $sourceHash = (Get-FileHash -LiteralPath (Join-Path $repo $relative) -Algorithm SHA256).Hash
-    $targetHash = (Get-FileHash -LiteralPath (Join-Path $target $relative) -Algorithm SHA256).Hash
+foreach ($relative in $required) {
+    $sourceHash = (Get-FileHash -LiteralPath (Join-Path $repo $relative) `
+        -Algorithm SHA256).Hash
+    $targetHash = (Get-FileHash -LiteralPath (Join-Path $target $relative) `
+        -Algorithm SHA256).Hash
     if ($sourceHash -ne $targetHash) {
-        throw "Kopie fehlerhaft: $relative"
+        throw "Datei fehlerhaft kopiert: $relative"
     }
 }
 
-Write-Host '[Terraform Plus] Installation verifiziert: v0.0.10.0' -ForegroundColor Green
-Write-Host '[Terraform Plus] UI-Befehle: tpUI, tpUIMouse' -ForegroundColor Green
+Write-Host "[Terraform Plus] Installation verifiziert: v$expectedVersion" `
+    -ForegroundColor Green
+Write-Host "[Terraform Plus] $($declared.Count) Lua-Dateien kontrolliert" `
+    -ForegroundColor Green
+Write-Host '[Terraform Plus] Neue Befehle: tpChangeLimit, tpDesignCheck' `
+    -ForegroundColor Green
 Write-Host "[Terraform Plus] Ziel: $target"
-Write-Host 'Spiel vollstaendig neu starten.'
+Write-Host 'LS25 vollstaendig neu starten.'

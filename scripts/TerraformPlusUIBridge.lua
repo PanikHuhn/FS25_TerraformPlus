@@ -1,103 +1,110 @@
 
--- Terraform Plus 0.0.11.0 - UI and design integration
--- Loaded AFTER TerraformPlus.lua; tested 0.0.9 core remains unchanged.
-if TerraformPlus==nil then error("TerraformPlus.lua muss zuerst geladen werden") end
-if TerrainToolUI==nil then error("TerrainToolUI.lua muss zuerst geladen werden") end
-if TerrainDesign==nil then error("TerrainDesign.lua muss zuerst geladen werden") end
+-- Terraform Plus v0.0.12.0 - UI/Planung Integration
+-- Muss NACH TerraformPlus.lua in modDesc.xml geladen werden.
+if TerraformPlus==nil then error("TerraformPlus.lua fehlt") end
+if TerrainToolUI==nil then error("TerrainToolUI.lua fehlt") end
+if TerrainDesign==nil then error("TerrainDesign.lua fehlt") end
 
-local coreAlreadyHasUI = type(TerraformPlus.consoleCommandUI)=="function"
-TerraformPlus.VERSION="0.0.11.0"
-
-local function ensureCommand(name,desc,method)
+local coreHasUI=type(TerraformPlus.consoleCommandUI)=="function"
+TerraformPlus.VERSION="0.0.12.0"
+local function ensureCommand(name,description,method)
     TerraformPlus.COMMANDS=TerraformPlus.COMMANDS or {}
-    for _,v in ipairs(TerraformPlus.COMMANDS) do
-        if v[1]==name then return end
+    for _,c in ipairs(TerraformPlus.COMMANDS) do
+        if c[1]==name then return end
     end
-    table.insert(TerraformPlus.COMMANDS,{name,desc,method})
+    table.insert(TerraformPlus.COMMANDS,{name,description,method})
 end
 local function ensureAction(name,callback,label)
     TerraformPlus.INPUT_ACTIONS=TerraformPlus.INPUT_ACTIONS or {}
-    for _,v in ipairs(TerraformPlus.INPUT_ACTIONS) do
-        if v.name==name then return end
+    for _,a in ipairs(TerraformPlus.INPUT_ACTIONS) do
+        if a.name==name then return end
     end
     table.insert(TerraformPlus.INPUT_ACTIONS,
         {name=name,callback=callback,label=label})
 end
 
 function TerraformPlus:consoleCommandUI()
-    local visible=TerrainToolUI.toggle()
+    local shown=TerrainToolUI.toggle()
     return "[Terraform Plus] Werkzeugfenster "
-        ..(visible and "eingeblendet" or "ausgeblendet")
+        ..(shown and "eingeblendet" or "ausgeblendet")
 end
 function TerraformPlus:consoleCommandUIMouse()
-    local ok,state=TerrainToolUI.toggleMouse()
-    if not ok then return "[Terraform Plus] Mausmodus-Fehler: "..tostring(state) end
+    local ok,active=TerrainToolUI.toggleMouse()
+    if not ok then return "[Terraform Plus] Mausmodus-Fehler: "..tostring(active) end
     return "[Terraform Plus] UI-Mausmodus "
-        ..(state and "aktiviert" or "deaktiviert")
+        ..(active and "aktiviert" or "deaktiviert")
 end
 function TerraformPlus:onInputUI() print(self:consoleCommandUI()) end
 function TerraformPlus:onInputMouse() print(self:consoleCommandUIMouse()) end
 
-local function settings(owner)
+local function design(owner)
     if owner.design==nil then
-        owner.design={offset=0,slope=0,feather=0,mode="all",enabled=true}
+        owner.design={offset=0,slope=0,feather=0,
+            maxChange=TerrainDesign.DEFAULT_CHANGE,mode="all",enabled=true}
+    end
+    if owner.design.maxChange==nil then
+        owner.design.maxChange=TerrainDesign.DEFAULT_CHANGE
     end
     return owner.design
 end
 local function invalidate(owner)
-    local d=settings(owner)
+    local d=design(owner)
     d.cacheBase=nil
-    d.cacheArea=nil
+    d.cachePointA=nil
     d.cacheKey=nil
+    d.cacheArea=nil
+    d.cacheError=nil
 end
-local function settingNumber(owner,key,value,minimum,maximum,label)
-    local d=settings(owner)
+local function setNumber(owner,field,value,min,max,label)
+    local d=design(owner)
     if value==nil or value=="" then
-        return string.format("[Terraform Plus] %s: %.2f",label,d[key])
+        return string.format("[Terraform Plus] %s: %.2f",label,d[field])
     end
     local n=tonumber(value)
     if n==nil or n~=n or n==math.huge or n==-math.huge
-        or n<minimum or n>maximum then
+        or n<min or n>max then
         return string.format("[Terraform Plus] %s: erlaubt %.2f bis %.2f",
-            label,minimum,maximum)
+            label,min,max)
     end
-    d[key]=n
+    d[field]=n
     invalidate(owner)
     return string.format("[Terraform Plus] %s: %.2f",label,n)
 end
+
 function TerraformPlus:consoleCommandTargetOffset(value)
-    return settingNumber(self,"offset",value,
-        TerrainDesign.MIN_OFFSET,TerrainDesign.MAX_OFFSET,"Hoehenversatz (m)")
+    return setNumber(self,"offset",value,TerrainDesign.MIN_OFFSET,
+        TerrainDesign.MAX_OFFSET,"Hoehenversatz (m)")
 end
 function TerraformPlus:consoleCommandTargetHeight(value)
-    if self.pointA==nil then
-        return "[Terraform Plus] Erst Startpunkt A setzen"
-    end
+    if self.pointA==nil then return "[Terraform Plus] Erst Punkt A setzen" end
     if value==nil or value=="" then
-        return string.format("[Terraform Plus] Zielhoehe bei A: %.3f m",
-            self.pointA.terrainY+settings(self).offset)
+        return string.format("[Terraform Plus] Zielhoehe A: %.3f m",
+            self.pointA.terrainY+design(self).offset)
     end
-    local height=tonumber(value)
-    if height==nil or height~=height then
-        return "[Terraform Plus] Gueltige Zielhoehe angeben"
+    local n=tonumber(value)
+    if n==nil or n~=n or n==math.huge or n==-math.huge then
+        return "[Terraform Plus] Zielhoehe muss eine endliche Zahl sein"
     end
-    return self:consoleCommandTargetOffset(
-        tostring(height-self.pointA.terrainY))
+    return self:consoleCommandTargetOffset(tostring(n-self.pointA.terrainY))
 end
 function TerraformPlus:consoleCommandTargetSlope(value)
-    return settingNumber(self,"slope",value,
-        TerrainDesign.MIN_SLOPE,TerrainDesign.MAX_SLOPE,"Zielsteigung (%)")
+    return setNumber(self,"slope",value,TerrainDesign.MIN_SLOPE,
+        TerrainDesign.MAX_SLOPE,"Zielsteigung (%)")
 end
 function TerraformPlus:consoleCommandEdgeBlend(value)
-    return settingNumber(self,"feather",value,
-        TerrainDesign.MIN_FEATHER,TerrainDesign.MAX_FEATHER,"Weicher Rand (m)")
+    return setNumber(self,"feather",value,TerrainDesign.MIN_FEATHER,
+        TerrainDesign.MAX_FEATHER,"Weicher Rand (m)")
 end
-function TerraformPlus:consoleCommandWorkMode(mode)
-    local d=settings(self)
-    if mode==nil or mode=="" then
-        return "[Terraform Plus] Modus: "..d.mode
+function TerraformPlus:consoleCommandChangeLimit(value)
+    return setNumber(self,"maxChange",value,TerrainDesign.MIN_CHANGE,
+        TerrainDesign.MAX_CHANGE,"Max. Hoehenaenderung (m)")
+end
+function TerraformPlus:consoleCommandWorkMode(value)
+    local d=design(self)
+    if value==nil or value=="" then
+        return "[Terraform Plus] Bearbeitungsmodus: "..d.mode
     end
-    mode=string.lower(tostring(mode))
+    local mode=string.lower(tostring(value))
     if mode~="all" and mode~="cut" and mode~="fill" then
         return "[Terraform Plus] Modus: all / cut / fill"
     end
@@ -106,19 +113,23 @@ function TerraformPlus:consoleCommandWorkMode(mode)
     return "[Terraform Plus] Bearbeitungsmodus: "..mode
 end
 function TerraformPlus:consoleCommandDesignVisual()
-    local d=settings(self)
+    local d=design(self)
     d.enabled=not d.enabled
     return "[Terraform Plus] Soll-Vorschau "
         ..(d.enabled and "aktiviert" or "deaktiviert")
 end
 function TerraformPlus:consoleCommandDesignReset()
-    local d=settings(self)
-    d.offset=0; d.slope=0; d.feather=0; d.mode="all"
+    local d=design(self)
+    d.offset=0
+    d.slope=0
+    d.feather=0
+    d.maxChange=TerrainDesign.DEFAULT_CHANGE
+    d.mode="all"
     invalidate(self)
     return "[Terraform Plus] Soll-Gelaendeparameter zurueckgesetzt"
 end
 
--- Work on the already measured raster: do not re-query terrain each frame.
+-- Rechnet ausschliesslich mit dem bereits abgetasteten Raster.
 function TerraformPlus:getDesignArea()
     local base
     if self.selection~=nil and self.selection.active then
@@ -127,11 +138,11 @@ function TerraformPlus:getDesignArea()
         base=self.area
     end
     if base==nil or self.pointA==nil then
-        return nil,"Erst Start- und Endpunkt festlegen"
+        return nil,"Zuerst Start- und Endpunkt setzen"
     end
-    local d=settings(self)
-    local key=string.format("%.5f:%.5f:%.5f:%s:%.5f",
-        d.offset,d.slope,d.feather,d.mode,self.pointA.terrainY)
+    local d=design(self)
+    local key=string.format("%.6f;%.6f;%.6f;%.6f;%s;%.6f",
+        d.offset,d.slope,d.feather,d.maxChange,d.mode,self.pointA.terrainY)
     if d.cacheBase==base and d.cachePointA==self.pointA
         and d.cacheKey==key then
         return d.cacheArea,d.cacheError
@@ -146,56 +157,67 @@ function TerraformPlus:getDesignArea()
     return area,err
 end
 function TerraformPlus:consoleCommandDesign()
-    local d=settings(self)
-    local area,err=self:getDesignArea()
-    if area==nil then
+    local a,err=self:getDesignArea()
+    if a==nil then
         return "[Terraform Plus] Soll-Vorschau nicht bereit: "..tostring(err)
     end
     return string.format(
-        "[Terraform Plus] SOLL | HoeheA=%.3f m | Steigung=%+.2f%% | Rand=%.2f m | Modus=%s | Abtrag=%.3f m3 | Auftrag=%.3f m3 | Netto=%+.3f m3 | Zellen=%d",
-        area.startY,d.slope,d.feather,d.mode,
-        area.cutVolume,area.fillVolume,area.netVolume,#area.samples)
+        "[Terraform Plus] SOLL | HoeheA=%.3f m | Steigung=%+.2f%% | Rand=%.2f m | Modus=%s | Limit=%.2f m | Abtrag=%.3f m3 | Auftrag=%.3f m3 | Netto=%+.3f m3 | BegrenzteZellen=%d/%d | NichtGeplantesVolumen=%.3f m3",
+        a.startY,a.slope,a.feather,a.mode,a.maxChange,
+        a.cutVolume,a.fillVolume,a.netVolume,a.limitedCells,#a.samples,
+        a.limitedVolume)
+end
+function TerraformPlus:consoleCommandDesignCheck()
+    local a,err=self:getDesignArea()
+    if a==nil then
+        return "[Terraform Plus] PRUEFUNG NICHT MOEGLICH: "..tostring(err)
+    end
+    local state=a.limitedCells>0 and "BEGRENZT" or "INNERHALB LIMIT"
+    return string.format(
+        "[Terraform Plus] VORSCHAU-PRUEFUNG: %s | Max. Sollbedarf=%.2f m | Grenzwert=%.2f m | Limit aktiv in %d/%d Rasterzellen | Abtrag=%.2f m3 | Auftrag=%.2f m3 | KEINE GELAENDEAENDERUNG",
+        state,a.maxRequested,a.maxChange,a.limitedCells,#a.samples,
+        a.cutVolume,a.fillVolume)
 end
 
-for _,entry in ipairs({
-    {"tpUI","Werkzeugfenster umschalten","consoleCommandUI"},
-    {"tpUIMouse","UI-Mausmodus umschalten","consoleCommandUIMouse"},
-    {"tpDesign","Soll-Gelaendevolumen anzeigen","consoleCommandDesign"},
-    {"tpTargetOffset","Zielhoehe relativ zu A","consoleCommandTargetOffset"},
-    {"tpTargetHeight","Absolute Sollhoehe bei A","consoleCommandTargetHeight"},
-    {"tpTargetSlope","Sollsteigung in Prozent","consoleCommandTargetSlope"},
-    {"tpEdgeBlend","Weichen Rand einstellen","consoleCommandEdgeBlend"},
-    {"tpWorkMode","All/Cut/Fill festlegen","consoleCommandWorkMode"},
-    {"tpDesignVisual","Soll-Vorschau ein/aus","consoleCommandDesignVisual"},
-    {"tpDesignReset","Soll-Parameter zuruecksetzen","consoleCommandDesignReset"}
-}) do ensureCommand(entry[1],entry[2],entry[3]) end
+for _,c in ipairs({
+    {"tpUI","Werkzeugfenster ein/aus","consoleCommandUI"},
+    {"tpUIMouse","Mausmodus ein/aus","consoleCommandUIMouse"},
+    {"tpDesign","Soll-Gelaende anzeigen","consoleCommandDesign"},
+    {"tpDesignCheck","Soll-Plan pruefen","consoleCommandDesignCheck"},
+    {"tpTargetOffset","Hoehenversatz","consoleCommandTargetOffset"},
+    {"tpTargetHeight","Absolute Zielhoehe","consoleCommandTargetHeight"},
+    {"tpTargetSlope","Zielsteigung","consoleCommandTargetSlope"},
+    {"tpEdgeBlend","Weicher Rand","consoleCommandEdgeBlend"},
+    {"tpChangeLimit","Maximale Hoehenaenderung","consoleCommandChangeLimit"},
+    {"tpWorkMode","Bearbeitungsmodus","consoleCommandWorkMode"},
+    {"tpDesignVisual","Soll-Vorschau umschalten","consoleCommandDesignVisual"},
+    {"tpDesignReset","Soll-Plan zuruecksetzen","consoleCommandDesignReset"}
+}) do ensureCommand(c[1],c[2],c[3]) end
 ensureAction("TP_TOOL_UI","onInputUI","Terraform Plus: Werkzeugfenster")
 ensureAction("TP_TOOL_MOUSE","onInputMouse","Terraform Plus: Mausmodus")
 
 local oldLoadMap=TerraformPlus.loadMap
 function TerraformPlus:loadMap(...)
     local result=oldLoadMap(self,...)
-    self.design={offset=0,slope=0,feather=0,mode="all",enabled=true}
+    self.design={offset=0,slope=0,feather=0,
+        maxChange=TerrainDesign.DEFAULT_CHANGE,mode="all",enabled=true}
     if not TerrainToolUI.initialized then TerrainToolUI.initialize(self) end
     print("[Terraform Plus] Soll-Gelaende und UI bereit - Version "..self.VERSION)
     return result
 end
 
--- Do not double-hook an older all-in-one 0.0.10 core.
 local oldDraw=TerraformPlus.draw
 function TerraformPlus:draw(...)
     local designing=TerrainToolUI.page=="design"
-    local previousAreaFlag=self.areaEnabled
-    local previousProfileFlag=self.previewEnabled
+    local wasArea,wasProfile=self.areaEnabled,self.previewEnabled
     if designing then
         self.areaEnabled=false
         self.previewEnabled=false
     end
     local ok,err=pcall(oldDraw,self,...)
-    self.areaEnabled=previousAreaFlag
-    self.previewEnabled=previousProfileFlag
-    if not ok then print("[Terraform Plus] Basiszeichnung: "..tostring(err)) end
-    if designing and self.visualEnabled and settings(self).enabled then
+    self.areaEnabled,self.previewEnabled=wasArea,wasProfile
+    if not ok then print("[Terraform Plus] Basis-Zeichnung: "..tostring(err)) end
+    if designing and self.visualEnabled and design(self).enabled then
         local area=self:getDesignArea()
         local targetB=self.pointB
         if self.selection~=nil and self.selection.active
@@ -204,25 +226,27 @@ function TerraformPlus:draw(...)
         end
         if area~=nil and targetB~=nil then
             local drawn,drawErr=pcall(TerrainDesign.draw,area,self.pointA,targetB)
-            if not drawn then print("[Terraform Plus] Soll-Zeichnung: "..tostring(drawErr)) end
+            if not drawn then
+                print("[Terraform Plus] Soll-Vorschau-Zeichnung: "..tostring(drawErr))
+            end
         end
     end
-    if not coreAlreadyHasUI and TerrainToolUI.visible then
+    if not coreHasUI and TerrainToolUI.visible then
         local drawn,drawErr=pcall(TerrainToolUI.draw,self)
         if not drawn then
             TerrainToolUI.visible=false
             TerrainToolUI.disableMouse()
-            print("[Terraform Plus] UI-Zeichnung: "..tostring(drawErr))
+            print("[Terraform Plus] UI-Zeichenfehler: "..tostring(drawErr))
         end
     end
 end
 
-if not coreAlreadyHasUI then
-    local oldMouseEvent=TerraformPlus.mouseEvent
+if not coreHasUI then
+    local oldMouse=TerraformPlus.mouseEvent
     function TerraformPlus:mouseEvent(x,y,down,up,button,eventUsed)
         local used=eventUsed or false
-        if oldMouseEvent~=nil then
-            used=oldMouseEvent(self,x,y,down,up,button,used) or used
+        if oldMouse~=nil then
+            used=oldMouse(self,x,y,down,up,button,used) or used
         end
         if TerrainToolUI.mouseActive then
             local ok,result=pcall(TerrainToolUI.mouseEvent,
@@ -237,11 +261,12 @@ if not coreAlreadyHasUI then
     end
 end
 
+-- Im UI-Mausmodus wird der zuletzt anvisierte Terrainpunkt festgehalten.
 local oldSample=TerraformPlus.getSelectionSample
 function TerraformPlus:getSelectionSample(...)
     if TerrainToolUI.mouseActive then
         if TerrainToolUI.frozenSample==nil then
-            return nil,"Kein Ziel fixiert: Rechtsklick, Boden anvisieren, Rechtsklick"
+            return nil,"Kein Terrainziel fixiert: Rechtsklick, Boden anvisieren, Rechtsklick"
         end
         return self:createPoint(TerrainToolUI.frozenSample),nil
     end
@@ -252,8 +277,8 @@ local oldUpdate=TerraformPlus.update
 function TerraformPlus:update(dt,...)
     if oldUpdate~=nil then oldUpdate(self,dt,...) end
     if TerrainToolUI.initialized then
-        local ok,err=pcall(TerrainToolUI.update,self)
-        if not ok then print("[Terraform Plus] UI-Update: "..tostring(err)) end
+        local ok,err=pcall(TerrainToolUI.update,self,dt)
+        if not ok then print("[Terraform Plus] UI-Updatefehler: "..tostring(err)) end
     end
 end
 local oldDeleteMap=TerraformPlus.deleteMap
@@ -262,4 +287,5 @@ function TerraformPlus:deleteMap(...)
     self.design=nil
     return oldDeleteMap(self,...)
 end
-print("[Terraform Plus] 0.0.11.0 Methoden registriert (UI + Soll-Gelaende)")
+
+print("[Terraform Plus] 0.0.12.0 Methoden registriert (UI + Hoehenlimit)")

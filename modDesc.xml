@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <modDesc descVersion="105">
     <author>PanikHuhn</author>
-    <version>0.0.11.0</version>
+    <version>0.0.12.0</version>
     <title><en>Terraform Plus</en><de>Terraform Plus</de></title>
     <description>
-        <en><![CDATA[Terraform Plus - read-only terrain measurement, interactive selection, target elevation, slope, cut/fill modes and edge blending preview.]]></en>
-        <de><![CDATA[Terraform Plus - Gelaendeanalyse, interaktive Auswahl, Sollhoehe, Zielsteigung, Abtrag/Auftrag und weiche Randuebergaenge. Keine Gelaendeaenderung.]]></de>
+        <en><![CDATA[Terraform Plus - interactive terrain analysis, target grade preview, cut/fill and limited height changes. Read-only terrain planning.]]></en>
+        <de><![CDATA[Terraform Plus - interaktive Gelaendeanalyse mit Hoehenlimit, Soll-Vorschau, Abtrag/Auftrag und beschleunigten Bedienelementen. Keine Gelaendeaenderung.]]></de>
     </description>
     <iconFilename>icon.png</iconFilename>
     <multiplayer supported="false"/>
