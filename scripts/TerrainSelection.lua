@@ -1,7 +1,7 @@
 
 -- Terraform Plus - Terrain Selection
--- Version 0.0.8.0
--- Interactive selection without input interception
+-- Version: 0.0.9.0
+-- Interactive selection with camera or player cursor
 
 TerrainSelection = TerrainSelection or {}
 
@@ -23,16 +23,16 @@ local function horizontalDistance(a, b)
 end
 
 
--- Startet eine neue Auswahl und sichert den alten Zustand.
+-- Auswahlmodus beginnen.
 function TerrainSelection.begin(owner)
 
-    if owner.selection ~= nil and owner.selection.active then
+    if owner.selection ~= nil
+        and owner.selection.active then
 
-        return nil,
-            "Auswahl bereits aktiv. tpAnchor / tpConfirm / tpCancel"
+        return nil, "Auswahl bereits aktiv"
     end
 
-    local sample, err = owner:getCurrentSample()
+    local sample, err = owner:getSelectionSample()
 
     if sample == nil then
         return nil, err
@@ -41,6 +41,7 @@ function TerrainSelection.begin(owner)
     owner.selection = {
         active = true,
         stage = "A",
+
         cursor = owner:createPoint(sample),
 
         cursorElapsed = 0,
@@ -58,9 +59,9 @@ function TerrainSelection.begin(owner)
         }
     }
 
+    -- Vorherige Messung ist gesichert.
     owner.pointA = nil
     owner.pointB = nil
-
     owner.measurement = nil
     owner.profile = nil
     owner.area = nil
@@ -69,16 +70,16 @@ function TerrainSelection.begin(owner)
 end
 
 
--- Fixiert den Startpunkt.
+-- Aktuelles Ziel als Startpunkt fixieren.
 function TerrainSelection.anchor(owner)
 
     local selection = owner.selection
 
     if selection == nil or not selection.active then
-        return nil, "Kein Auswahlmodus aktiv. tpSelect verwenden"
+        return nil, "Kein Auswahlmodus aktiv"
     end
 
-    local sample, err = owner:getCurrentSample()
+    local sample, err = owner:getSelectionSample()
 
     if sample == nil then
         return nil, err
@@ -96,6 +97,7 @@ function TerrainSelection.anchor(owner)
 
     selection.preview = nil
     selection.error = nil
+
     selection.analysisElapsed =
         TerrainSelection.PREVIEW_INTERVAL_MS
 
@@ -103,7 +105,7 @@ function TerrainSelection.anchor(owner)
 end
 
 
--- Bestaetigt die Auswahl mit voller Rastergenauigkeit.
+-- Aktuelles Ziel als Endpunkt bestaetigen.
 function TerrainSelection.confirm(owner)
 
     local selection = owner.selection
@@ -115,7 +117,7 @@ function TerrainSelection.confirm(owner)
         return nil, "Zuerst tpSelect und tpAnchor verwenden"
     end
 
-    local sample, err = owner:getCurrentSample()
+    local sample, err = owner:getSelectionSample()
 
     if sample == nil then
         return nil, err
@@ -123,17 +125,22 @@ function TerrainSelection.confirm(owner)
 
     local pointB = owner:createPoint(sample)
 
-    if horizontalDistance(owner.pointA, pointB) < 0.01 then
+    if horizontalDistance(
+        owner.pointA,
+        pointB
+    ) < 0.01 then
+
         return nil, "A und B liegen zu nah beieinander"
     end
 
-    local result, analysisError = owner:applyAnalysis(
+    -- Finale Analyse mit voller eingestellter Aufloesung.
+    local result, analysisErr = owner:applyAnalysis(
         owner.pointA,
         pointB
     )
 
     if result == nil then
-        return nil, analysisError
+        return nil, analysisErr
     end
 
     owner.selection = nil
@@ -142,7 +149,7 @@ function TerrainSelection.confirm(owner)
 end
 
 
--- Bricht die Auswahl ohne Datenverlust ab.
+-- Auswahl abbrechen und alte Messung wiederherstellen.
 function TerrainSelection.cancel(owner)
 
     local selection = owner.selection
@@ -166,24 +173,24 @@ function TerrainSelection.cancel(owner)
 end
 
 
--- Verwirft die Vorschau nach Einstellungsveraenderungen.
+-- Live-Vorschau nach Einstellungswechsel verwerfen.
 function TerrainSelection.invalidate(owner)
 
     local selection = owner.selection
 
-    if selection ~= nil and selection.active then
-
-        selection.preview = nil
-        selection.error = nil
-
-        selection.analysisElapsed =
-            TerrainSelection.PREVIEW_INTERVAL_MS
+    if selection == nil or not selection.active then
+        return
     end
+
+    selection.preview = nil
+    selection.error = nil
+
+    selection.analysisElapsed =
+        TerrainSelection.PREVIEW_INTERVAL_MS
 end
 
 
--- Aktualisiert den Cursor und das Live-Gelaendeprofil.
--- dt wird von GIANTS in Millisekunden uebergeben.
+-- Cursorposition und Live-Analyse aktualisieren.
 function TerrainSelection.update(owner, dt)
 
     local selection = owner.selection
@@ -192,9 +199,11 @@ function TerrainSelection.update(owner, dt)
         return
     end
 
-    dt = type(dt) == "number"
-        and math.max(0, math.min(dt, 250))
-        or 0
+    if type(dt) ~= "number" then
+        dt = 0
+    end
+
+    dt = math.max(0, math.min(dt, 250))
 
     selection.cursorElapsed =
         selection.cursorElapsed + dt
@@ -202,7 +211,6 @@ function TerrainSelection.update(owner, dt)
     selection.analysisElapsed =
         selection.analysisElapsed + dt
 
-    -- Spielerposition hoechstens alle 100 ms abfragen
     if selection.cursorElapsed
         < TerrainSelection.CURSOR_INTERVAL_MS then
 
@@ -211,38 +219,49 @@ function TerrainSelection.update(owner, dt)
 
     selection.cursorElapsed = 0
 
-    local sample = owner:getCurrentSample()
+    -- Neu: wahlweise Kamera- oder Spielerposition.
+    local sample, err = owner:getSelectionSample()
 
     if sample == nil then
+
+        -- Niemals mit einem veralteten Ziel bestaetigen.
+        selection.cursor = nil
+        selection.preview = nil
+        selection.error = err
+
         return
     end
 
     selection.cursor = owner:createPoint(sample)
+    selection.error = nil
 
-    -- Ohne Startpunkt keine Flaechenanalyse
+    -- Vor dem Fixieren von A nur Cursor anzeigen.
     if selection.stage ~= "B"
         or owner.pointA == nil then
 
         return
     end
 
-    if horizontalDistance(
+    local distance = horizontalDistance(
         owner.pointA,
         selection.cursor
-    ) < 0.1 then
+    )
+
+    if distance < 0.1 then
 
         selection.preview = nil
         return
     end
 
-    -- Teure Analyse nur in festgelegten Intervallen
+    -- Aufwendige Analyse zeitlich begrenzen.
     if selection.analysisElapsed
         < TerrainSelection.PREVIEW_INTERVAL_MS then
 
         return
     end
 
-    -- Nicht erneut berechnen, wenn sich B kaum bewegt hat
+    -- Nur neu berechnen, wenn sich das Ziel
+    -- ausreichend verschoben hat.
     if selection.preview ~= nil
         and horizontalDistance(
             selection.preview.pointB,
@@ -254,15 +273,16 @@ function TerrainSelection.update(owner, dt)
 
     selection.analysisElapsed = 0
 
-    local candidate = owner:createPoint(selection.cursor)
+    local candidate = owner:createPoint(
+        selection.cursor
+    )
 
-    -- Fuer die Live-Vorschau groebere Rasteraufloesung
     local coarseStep = math.max(
         owner.areaStep,
         TerrainSelection.PREVIEW_GRID_STEP
     )
 
-    local result, err = owner:buildAnalysis(
+    local result, analysisErr = owner:buildAnalysis(
         owner.pointA,
         candidate,
         coarseStep
@@ -271,7 +291,7 @@ function TerrainSelection.update(owner, dt)
     if result == nil then
 
         selection.preview = nil
-        selection.error = tostring(err)
+        selection.error = tostring(analysisErr)
 
         return
     end
@@ -282,20 +302,15 @@ function TerrainSelection.update(owner, dt)
         profile = result.profile,
         area = result.area
     }
-
-    selection.error = nil
 end
 
 
--- Zeichnet den interaktiven Cursor und den Auswahlstatus.
+-- Zusatz-HUD und Cursor zeichnen.
 function TerrainSelection.draw(owner)
 
     local selection = owner.selection
 
-    if selection == nil
-        or not selection.active
-        or selection.cursor == nil then
-
+    if selection == nil or not selection.active then
         return
     end
 
@@ -303,37 +318,33 @@ function TerrainSelection.draw(owner)
         return
     end
 
-    -- Gelbe Positionsmarkierung
-    TerrainVisualizer.drawMarker(
-        selection.cursor,
-        "CURSOR",
-        TerrainSelection.COLOR_CURSOR
-    )
+    local cursor = selection.cursor
 
-    local distance = 0
+    if cursor ~= nil then
 
-    -- Hilfslinie von A zur aktuellen Cursorposition
-    if selection.stage == "B"
-        and owner.pointA ~= nil then
-
-        distance = horizontalDistance(
-            owner.pointA,
-            selection.cursor
+        TerrainVisualizer.drawMarker(
+            cursor,
+            "CURSOR",
+            TerrainSelection.COLOR_CURSOR
         )
 
-        TerrainVisualizer.drawLine(
-            owner.pointA.x,
-            owner.pointA.terrainY + 1.9,
-            owner.pointA.z,
+        if selection.stage == "B"
+            and owner.pointA ~= nil then
 
-            selection.cursor.x,
-            selection.cursor.terrainY + 1.9,
-            selection.cursor.z,
+            TerrainVisualizer.drawLine(
+                owner.pointA.x,
+                owner.pointA.terrainY + 1.9,
+                owner.pointA.z,
 
-            TerrainSelection.COLOR_GUIDE[1],
-            TerrainSelection.COLOR_GUIDE[2],
-            TerrainSelection.COLOR_GUIDE[3]
-        )
+                cursor.x,
+                cursor.terrainY + 1.9,
+                cursor.z,
+
+                TerrainSelection.COLOR_GUIDE[1],
+                TerrainSelection.COLOR_GUIDE[2],
+                TerrainSelection.COLOR_GUIDE[3]
+            )
+        end
     end
 
     if type(renderText) ~= "function"
@@ -343,48 +354,54 @@ function TerrainSelection.draw(owner)
     end
 
     local lines = {
-        "TERRAFORM PLUS - INTERACTIVE SELECTION"
+        "TERRAFORM PLUS - CURSOR SELECTION"
     }
 
     if selection.stage == "A" then
 
         lines[#lines + 1] =
-            "Schritt 1: Position waehlen, dann tpAnchor"
+            "Schritt 1: Boden anvisieren und tpAnchor"
 
     else
 
-        lines[#lines + 1] = string.format(
-            "Schritt 2: Endpunkt waehlen, dann tpConfirm | Distanz: %.2f m",
-            distance
-        )
+        lines[#lines + 1] =
+            "Schritt 2: Ziel anvisieren und tpConfirm"
+
+        if owner.pointA ~= nil and cursor ~= nil then
+
+            lines[#lines + 1] = string.format(
+                "Aktuelle Distanz: %.2f m",
+                horizontalDistance(owner.pointA, cursor)
+            )
+        end
 
         if selection.preview ~= nil then
 
             local area = selection.preview.area
 
             lines[#lines + 1] = string.format(
-                "LIVE (grobes Raster): Abtrag %.1f m3 | Auftrag %.1f m3",
+                "LIVE: Abtrag %.1f m3 | Auftrag %.1f m3",
                 area.cutVolume,
                 area.fillVolume
             )
-
-        else
-
-            lines[#lines + 1] =
-                "LIVE-Profil wird nach Positionswechsel berechnet"
         end
     end
 
     lines[#lines + 1] = string.format(
-        "Arbeitsbreite: %.1f m | Zielraster: %.1f m | tpCancel zum Abbrechen",
+        "Cursor: %s | Breite: %.1f m | Raster: %.1f m",
+        owner.cursorMode,
         owner.areaWidth,
         owner.areaStep
     )
 
     if selection.error ~= nil then
+
         lines[#lines + 1] =
-            "Vorschaufehler: " .. selection.error
+            "Hinweis: " .. tostring(selection.error)
     end
+
+    lines[#lines + 1] =
+        "Strg+Alt+G: Setzen | Strg+Alt+X: Abbrechen"
 
     if RenderText ~= nil
         and type(setTextAlignment) == "function" then
@@ -396,12 +413,12 @@ function TerrainSelection.draw(owner)
         setTextBold(false)
     end
 
-    -- Zusaetzliches HUD unten links
+    -- Informationen unten links darstellen.
     for i, line in ipairs(lines) do
 
-        local y = 0.23 - (i - 1) * 0.027
+        local y = 0.25 - (i - 1) * 0.027
 
-        setTextColor(0, 0, 0, 0.95)
+        setTextColor(0, 0, 0, 0.9)
 
         renderText(
             0.021,
@@ -418,6 +435,25 @@ function TerrainSelection.draw(owner)
             0.018,
             line
         )
+    end
+
+    -- Fadenkreuz in der Bildschirmmitte
+    -- nur fuer den Kameramodus.
+    if owner.cursorMode == "camera"
+        and RenderText ~= nil
+        and type(setTextAlignment) == "function" then
+
+        setTextAlignment(RenderText.ALIGN_CENTER)
+
+        if cursor ~= nil then
+            setTextColor(1, 0.95, 0.2, 1)
+        else
+            setTextColor(1, 0.2, 0.2, 1)
+        end
+
+        renderText(0.5, 0.5, 0.028, "+")
+
+        setTextAlignment(RenderText.ALIGN_LEFT)
     end
 
     setTextColor(1, 1, 1, 1)

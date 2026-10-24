@@ -1,39 +1,59 @@
 
 -- Terraform Plus
--- Version: 0.0.8.0
--- Interactive selection and read-only terrain analysis
+-- Version: 0.0.9.0
+-- Camera targeting, interactive selection and terrain analysis
 
 TerraformPlus = TerraformPlus or {}
 
-TerraformPlus.VERSION = "0.0.8.0"
+TerraformPlus.VERSION = "0.0.9.0"
 
-
--- Alle Konsolenbefehle
 TerraformPlus.COMMANDS = {
-    {"tpHeight", "Zeigt die Gelaendehoehe", "consoleCommandHeight"},
+    {"tpHeight", "Gelaendehoehe", "consoleCommandHeight"},
     {"tpSetA", "Setzt Messpunkt A", "consoleCommandSetA"},
     {"tpSetB", "Setzt Messpunkt B", "consoleCommandSetB"},
-    {"tpMeasure", "Zeigt Entfernung und Steigung", "consoleCommandMeasure"},
-    {"tpProfile", "Zeigt das 1D-Gelaendeprofil", "consoleCommandProfile"},
+    {"tpMeasure", "Zeigt die Steigung", "consoleCommandMeasure"},
+    {"tpProfile", "Zeigt das Terrainprofil", "consoleCommandProfile"},
     {"tpPreview", "Schaltet die 1D-Vorschau um", "consoleCommandPreview"},
     {"tpWidth", "Setzt die Arbeitsbreite", "consoleCommandWidth"},
     {"tpGridStep", "Setzt den Rasterabstand", "consoleCommandGridStep"},
-    {"tpVolume", "Zeigt die 2D-Volumenberechnung", "consoleCommandVolume"},
+    {"tpVolume", "Zeigt das Volumen", "consoleCommandVolume"},
     {"tpAreaVisual", "Schaltet die 2D-Vorschau um", "consoleCommandAreaVisual"},
-    {"tpRefresh", "Berechnet alle Analysen neu", "consoleCommandRefresh"},
-    {"tpVisual", "Schaltet alle Visualisierungen um", "consoleCommandVisual"},
-    {"tpClear", "Loescht die Messpunkte", "consoleCommandClear"},
+    {"tpRefresh", "Aktualisiert die Analyse", "consoleCommandRefresh"},
+    {"tpVisual", "Schaltet die Visualisierung um", "consoleCommandVisual"},
+    {"tpClear", "Loescht Messpunkte", "consoleCommandClear"},
 
-    -- Neue Befehle
-    {"tpSelect", "Startet interaktive Auswahl", "consoleCommandSelect"},
-    {"tpAnchor", "Fixiert den Startpunkt der Auswahl", "consoleCommandAnchor"},
-    {"tpConfirm", "Bestaetigt die Auswahl", "consoleCommandConfirm"},
+    {"tpSelect", "Startet die Auswahl", "consoleCommandSelect"},
+    {"tpAnchor", "Fixiert Startpunkt A", "consoleCommandAnchor"},
+    {"tpConfirm", "Bestaetigt Punkt B", "consoleCommandConfirm"},
     {"tpCancel", "Bricht die Auswahl ab", "consoleCommandCancel"},
-    {"tpSelection", "Zeigt den Auswahlstatus", "consoleCommandSelection"}
+    {"tpSelection", "Zeigt den Auswahlstatus", "consoleCommandSelection"},
+
+    {"tpAim", "Zeigt das Kameraziel", "consoleCommandAim"},
+    {"tpCursorMode", "Waehlt den Cursormodus", "consoleCommandCursorMode"}
 }
 
 
--- Messpunkt als unabhaengige Tabelle speichern.
+-- Eigene GIANTS-Input-Actions
+TerraformPlus.INPUT_ACTIONS = {
+    {
+        name = "TP_TOOL_SELECT",
+        callback = "onInputSelect",
+        label = "Terraform Plus: Auswahl starten"
+    },
+    {
+        name = "TP_TOOL_PLACE",
+        callback = "onInputPlace",
+        label = "Terraform Plus: Punkt setzen"
+    },
+    {
+        name = "TP_TOOL_CANCEL",
+        callback = "onInputCancel",
+        label = "Terraform Plus: Auswahl abbrechen"
+    }
+}
+
+
+-- Erstellt eine Kopie eines Messpunkts.
 function TerraformPlus:createPoint(sample)
 
     return {
@@ -44,12 +64,11 @@ function TerraformPlus:createPoint(sample)
 end
 
 
--- Spielerposition und Terrainhoehe abfragen.
+-- Spielerposition und Gelaendehoehe lesen.
 function TerraformPlus:getCurrentSample()
 
     if TerrainAdapter == nil
-        or type(TerrainAdapter.getHeightAtPlayer)
-            ~= "function" then
+        or type(TerrainAdapter.getHeightAtPlayer) ~= "function" then
 
         return nil, "TerrainAdapter nicht verfuegbar"
     end
@@ -63,21 +82,36 @@ function TerraformPlus:getCurrentSample()
     end
 
     if sample == nil then
-        return nil, tostring(
-            err or "Spielerposition nicht verfuegbar"
-        )
+        return nil, tostring(err or "Keine Spielerposition")
     end
 
     return sample, nil
 end
 
 
--- Terrainhoehe an gespeicherten Koordinaten.
+-- Zielquelle fuer die interaktive Auswahl.
+function TerraformPlus:getSelectionSample()
+
+    if self.cursorMode == "camera" then
+
+        if TerrainCursor == nil
+            or type(TerrainCursor.getGroundPoint) ~= "function" then
+
+            return nil, "TerrainCursor nicht geladen"
+        end
+
+        return TerrainCursor.getGroundPoint()
+    end
+
+    return self:getCurrentSample()
+end
+
+
+-- Gespeicherte Terrainhoehe neu auslesen.
 function TerraformPlus:getHeightAtPoint(point)
 
     if TerrainAdapter == nil
-        or type(TerrainAdapter.getHeightAt)
-            ~= "function" then
+        or type(TerrainAdapter.getHeightAt) ~= "function" then
 
         return nil, "TerrainAdapter nicht verfuegbar"
     end
@@ -93,24 +127,20 @@ function TerraformPlus:getHeightAtPoint(point)
     end
 
     if type(height) ~= "number" then
-        return nil, tostring(
-            err or "Ungueltige Terrainhoehe"
-        )
+        return nil, tostring(err or "Ungueltige Hoehe")
     end
 
     return height, nil
 end
 
 
--- Durchschnittliche Steigung zwischen A und B.
+-- Durchschnittliche Steigung.
 function TerraformPlus:calculateSlope(a, b)
 
     local dx = b.x - a.x
     local dz = b.z - a.z
 
-    local distance = math.sqrt(
-        dx * dx + dz * dz
-    )
+    local distance = math.sqrt(dx * dx + dz * dz)
 
     if distance < 0.01 then
         return nil, "Messpunkte liegen zu nah beieinander"
@@ -121,45 +151,37 @@ function TerraformPlus:calculateSlope(a, b)
     return {
         distance = distance,
         heightDifference = dh,
-
-        slopePercent =
-            dh / distance * 100,
-
-        slopeAngle = math.deg(
-            math.atan(dh / distance)
-        )
+        slopePercent = dh / distance * 100,
+        slopeAngle = math.deg(math.atan(dh / distance))
     }, nil
 end
 
 
--- Alle Analysen berechnen, ohne den Zustand zu veraendern.
--- gridStepOverride wird nur fuer Live-Vorschauen verwendet.
-function TerraformPlus:buildAnalysis(
-    pointA,
-    pointB,
-    gridStepOverride
-)
+-- Vollstaendige Analyse, ohne den Spielstand zu veraendern.
+function TerraformPlus:buildAnalysis(a, b, stepOverride)
 
-    local measurement, err = self:calculateSlope(
-        pointA,
-        pointB
-    )
+    local measurement, err = self:calculateSlope(a, b)
 
     if measurement == nil then
         return nil, err
     end
 
-    -- 1D-Profil
     if TerrainProfile == nil
         or type(TerrainProfile.build) ~= "function" then
 
         return nil, "TerrainProfile nicht geladen"
     end
 
+    if TerrainArea == nil
+        or type(TerrainArea.build) ~= "function" then
+
+        return nil, "TerrainArea nicht geladen"
+    end
+
     local ok, profile, profileErr = pcall(
         TerrainProfile.build,
-        pointA,
-        pointB
+        a,
+        b
     )
 
     if not ok then
@@ -170,19 +192,12 @@ function TerraformPlus:buildAnalysis(
         return nil, tostring(profileErr)
     end
 
-    -- 2D-Raster
-    if TerrainArea == nil
-        or type(TerrainArea.build) ~= "function" then
-
-        return nil, "TerrainArea nicht geladen"
-    end
-
-    local step = gridStepOverride or self.areaStep
+    local step = stepOverride or self.areaStep
 
     local areaOk, area, areaErr = pcall(
         TerrainArea.build,
-        pointA,
-        pointB,
+        a,
+        b,
         self.areaWidth,
         step
     )
@@ -203,20 +218,17 @@ function TerraformPlus:buildAnalysis(
 end
 
 
--- Erfolgreiche Analyse uebernehmen.
-function TerraformPlus:applyAnalysis(pointA, pointB)
+-- Ergebnisse nur nach erfolgreicher Analyse uebernehmen.
+function TerraformPlus:applyAnalysis(a, b)
 
-    local result, err = self:buildAnalysis(
-        pointA,
-        pointB
-    )
+    local result, err = self:buildAnalysis(a, b)
 
     if result == nil then
         return nil, err
     end
 
-    self.pointA = pointA
-    self.pointB = pointB
+    self.pointA = a
+    self.pointB = b
 
     self.measurement = result.measurement
     self.profile = result.profile
@@ -226,8 +238,117 @@ function TerraformPlus:applyAnalysis(pointA, pointB)
 end
 
 
--- Karte initialisieren.
+-- Registrierung der optionalen Input-Events.
+-- Aufruf aus dem Spieler-Eingabekontext.
+function TerraformPlus.registerPlayerActions(playerInput)
+
+    if not TerraformPlus.mapActive then
+        return
+    end
+
+    if playerInput == nil
+        or playerInput.player == nil
+        or not playerInput.player.isOwner then
+
+        return
+    end
+
+    if g_inputBinding == nil
+        or type(g_inputBinding.registerActionEvent)
+            ~= "function" then
+
+        return
+    end
+
+    TerraformPlus.actionEventIds = {}
+
+    for _, action in ipairs(TerraformPlus.INPUT_ACTIONS) do
+
+        local actionName = action.name
+
+        if InputAction ~= nil
+            and InputAction[actionName] ~= nil then
+
+            actionName = InputAction[actionName]
+        end
+
+        local ok, success, eventId = pcall(
+            g_inputBinding.registerActionEvent,
+            g_inputBinding,
+            actionName,
+            TerraformPlus,
+            TerraformPlus[action.callback],
+            false,
+            true,
+            false,
+            true
+        )
+
+        if ok and success and eventId ~= nil then
+
+            table.insert(
+                TerraformPlus.actionEventIds,
+                eventId
+            )
+
+            if type(g_inputBinding.setActionEventText)
+                == "function" then
+
+                pcall(
+                    g_inputBinding.setActionEventText,
+                    g_inputBinding,
+                    eventId,
+                    action.label
+                )
+            end
+
+        else
+
+            print(
+                "[Terraform Plus] Tastenzuweisung nicht aktiv: "
+                .. action.name
+            )
+        end
+    end
+end
+
+
+-- Input-Integration nur einmal installieren.
+function TerraformPlus:installInputHook()
+
+    if self.inputHookInstalled then
+        return
+    end
+
+    if PlayerInputComponent == nil
+        or type(PlayerInputComponent.registerGlobalPlayerActionEvents)
+            ~= "function"
+        or Utils == nil
+        or type(Utils.appendedFunction) ~= "function" then
+
+        print(
+            "[Terraform Plus] Input-Hook nicht verfuegbar; Konsolenbefehle bleiben nutzbar"
+        )
+
+        return
+    end
+
+    PlayerInputComponent.registerGlobalPlayerActionEvents =
+        Utils.appendedFunction(
+            PlayerInputComponent.registerGlobalPlayerActionEvents,
+            TerraformPlus.registerPlayerActions
+        )
+
+    self.inputHookInstalled = true
+
+    print("[Terraform Plus] Eingabesteuerung registriert")
+end
+
+
+-- Karte laden.
 function TerraformPlus:loadMap()
+
+    self.mapActive = true
 
     self.pointA = nil
     self.pointB = nil
@@ -248,11 +369,14 @@ function TerraformPlus:loadMap()
         and TerrainArea.DEFAULT_STEP
         or 2.0
 
+    self.cursorMode = "camera"
+
     self.visualEnabled = true
     self.previewEnabled = true
     self.areaEnabled = true
 
     self.commandsRegistered = false
+    self.actionEventIds = {}
 
     for _, command in ipairs(self.COMMANDS) do
 
@@ -266,17 +390,18 @@ function TerraformPlus:loadMap()
 
     self.commandsRegistered = true
 
+    self:installInputHook()
+
     print(
         "[Terraform Plus] Mod geladen - Version "
         .. self.VERSION
     )
 
-    print("[Terraform Plus] Auswahlsteuerung bereit")
+    print("[Terraform Plus] Kamera-Cursor bereit")
 end
 
 
--- Live-Auswahl aktualisieren.
--- Keine direkte Eingabesteuerung.
+-- Interaktive Auswahl aktualisieren.
 function TerraformPlus:update(dt)
 
     if self.selection == nil
@@ -298,13 +423,12 @@ function TerraformPlus:update(dt)
             .. tostring(err)
         )
 
-        -- Bei einem unerwarteten Fehler Zustand restaurieren
         TerrainSelection.cancel(self)
     end
 end
 
 
--- Zeichenfunktion
+-- Visualisierung.
 function TerraformPlus:draw()
 
     if not self.visualEnabled then
@@ -322,27 +446,25 @@ function TerraformPlus:draw()
     local active =
         selection ~= nil and selection.active
 
-    local pointB = self.pointB
+    local b = self.pointB
     local measurement = self.measurement
     local profile = self.profile
     local area = self.area
 
-    -- Zwischenberechnete Auswahl anzeigen
     if active and selection.preview ~= nil then
 
-        pointB = selection.preview.pointB
+        b = selection.preview.pointB
         measurement = selection.preview.measurement
         profile = selection.preview.profile
         area = selection.preview.area
     end
 
-    -- Vorhandene Visualisierung verwenden
     if self.pointA ~= nil then
 
         local ok, err = pcall(
             TerrainVisualizer.draw,
             self.pointA,
-            pointB,
+            b,
             measurement,
             profile,
             self.previewEnabled,
@@ -363,7 +485,6 @@ function TerraformPlus:draw()
         end
     end
 
-    -- Interaktiven Cursor zusaetzlich zeichnen
     if active then
 
         local ok, err = pcall(
@@ -376,7 +497,7 @@ function TerraformPlus:draw()
             self.visualEnabled = false
 
             print(
-                "[Terraform Plus] Auswahlzeichnung deaktiviert: "
+                "[Terraform Plus] Cursordarstellung deaktiviert: "
                 .. tostring(err)
             )
         end
@@ -384,7 +505,7 @@ function TerraformPlus:draw()
 end
 
 
--- tpHeight
+-- tpHeight: Spielerposition.
 function TerraformPlus:consoleCommandHeight()
 
     local s, err = self:getCurrentSample()
@@ -402,10 +523,63 @@ function TerraformPlus:consoleCommandHeight()
 end
 
 
--- tpSetA
+-- tpAim: Terrainposition in der Bildschirmmitte.
+function TerraformPlus:consoleCommandAim()
+
+    if TerrainCursor == nil then
+        return "[Terraform Plus] TerrainCursor nicht geladen"
+    end
+
+    local s, err = TerrainCursor.getGroundPoint()
+
+    if s == nil then
+        return "[Terraform Plus] Ziel nicht verfuegbar: "
+            .. tostring(err)
+    end
+
+    return string.format(
+        "[Terraform Plus] AIM | X=%.2f Z=%.2f | H=%.3f m | Entfernung=%.2f m",
+        s.x,
+        s.z,
+        s.terrainY,
+        s.rayDistance
+    )
+end
+
+
+-- tpCursorMode [camera/player]
+function TerraformPlus:consoleCommandCursorMode(mode)
+
+    if mode == nil or mode == "" then
+
+        return "[Terraform Plus] Cursormodus: "
+            .. tostring(self.cursorMode)
+    end
+
+    mode = string.lower(tostring(mode))
+
+    if mode ~= "camera" and mode ~= "player" then
+
+        return "[Terraform Plus] Gueltig: tpCursorMode camera / player"
+    end
+
+    self.cursorMode = mode
+
+    if TerrainSelection ~= nil then
+        TerrainSelection.invalidate(self)
+    end
+
+    if self.selection ~= nil then
+        self.selection.cursor = nil
+    end
+
+    return "[Terraform Plus] Cursormodus: " .. mode
+end
+
+
+-- tpSetA: manuelle Messung oder Auswahl.
 function TerraformPlus:consoleCommandSetA()
 
-    -- Im Auswahlmodus als tpAnchor verwenden
     if self.selection ~= nil and self.selection.active then
         return self:consoleCommandAnchor()
     end
@@ -432,10 +606,9 @@ function TerraformPlus:consoleCommandSetA()
 end
 
 
--- tpSetB
+-- tpSetB: manuelle Messung oder Auswahl.
 function TerraformPlus:consoleCommandSetB()
 
-    -- Im Auswahlmodus als tpConfirm verwenden
     if self.selection ~= nil and self.selection.active then
         return self:consoleCommandConfirm()
     end
@@ -450,36 +623,22 @@ function TerraformPlus:consoleCommandSetB()
         return "[Terraform Plus] Fehler: " .. tostring(err)
     end
 
-    local pointB = self:createPoint(s)
-
     local result, analysisErr = self:applyAnalysis(
         self.pointA,
-        pointB
+        self:createPoint(s)
     )
 
     if result == nil then
-
         return "[Terraform Plus] Analyse fehlgeschlagen: "
             .. tostring(analysisErr)
     end
 
-    print(string.format(
-        "[Terraform Plus] Terrainprofil: %d Samples",
-        #self.profile.samples
-    ))
-
-    print(string.format(
-        "[Terraform Plus] Terrainraster: %d x %d = %d Zellen",
-        self.area.lengthCells,
-        self.area.widthCells,
-        #self.area.samples
-    ))
-
     return string.format(
-        "[Terraform Plus] Punkt B gesetzt: X=%.2f Z=%.2f H=%.3f m",
+        "[Terraform Plus] Punkt B gesetzt: X=%.2f Z=%.2f H=%.3f m | Zellen=%d",
         self.pointB.x,
         self.pointB.z,
-        self.pointB.terrainY
+        self.pointB.terrainY,
+        #self.area.samples
     )
 end
 
@@ -488,14 +647,14 @@ end
 function TerraformPlus:consoleCommandMeasure()
 
     local m = self.measurement
-    local prefix = "[Terraform Plus] A -> B"
+    local prefix = "A -> B"
 
     if m == nil
         and self.selection ~= nil
         and self.selection.preview ~= nil then
 
         m = self.selection.preview.measurement
-        prefix = "[Terraform Plus] LIVE A -> B"
+        prefix = "LIVE A -> B"
     end
 
     if m == nil then
@@ -503,7 +662,7 @@ function TerraformPlus:consoleCommandMeasure()
     end
 
     return string.format(
-        "%s | Distanz=%.2f m | DeltaH=%+.3f m | Steigung=%+.2f%% | Winkel=%+.2f Grad",
+        "[Terraform Plus] %s | Distanz=%.2f m | DeltaH=%+.3f m | Steigung=%+.2f%% | Winkel=%+.2f Grad",
         prefix,
         m.distance,
         m.heightDifference,
@@ -517,14 +676,12 @@ end
 function TerraformPlus:consoleCommandProfile()
 
     local p = self.profile
-    local prefix = "PROFIL"
 
     if p == nil
         and self.selection ~= nil
         and self.selection.preview ~= nil then
 
         p = self.selection.preview.profile
-        prefix = "LIVE-PROFIL"
     end
 
     if p == nil then
@@ -559,8 +716,7 @@ function TerraformPlus:consoleCommandProfile()
     end
 
     return string.format(
-        "[Terraform Plus] %s | Samples=%d | Schritt=%.2f m | Min=%.3f m | Max=%.3f m | SteilsterAbschnitt=%+.2f%% | Abtrag=%.3f m2 | Auftrag=%.3f m2 | Netto=%+.3f m2 | MaxAbtrag=%.3f m bei %s | MaxAuftrag=%.3f m bei %s",
-        prefix,
+        "[Terraform Plus] PROFIL | Samples=%d | Schritt=%.2f m | Min=%.3f m | Max=%.3f m | SteilsterAbschnitt=%+.2f%% | Abtrag=%.3f m2 | Auftrag=%.3f m2 | Netto=%+.3f m2 | MaxAbtrag=%.3f m bei %s | MaxAuftrag=%.3f m bei %s",
         #p.samples,
         p.step,
         p.minHeight,
@@ -588,7 +744,7 @@ function TerraformPlus:consoleCommandVolume()
         and self.selection.preview ~= nil then
 
         a = self.selection.preview.area
-        prefix = "LIVE-VOLUMEN (grobes Raster)"
+        prefix = "LIVE-VOLUMEN"
     end
 
     if a == nil then
@@ -638,7 +794,7 @@ function TerraformPlus:consoleCommandVolume()
 end
 
 
--- Gemeinsame Funktion fuer tpWidth und tpGridStep.
+-- Gemeinsame Konfiguration fuer Breite und Raster.
 function TerraformPlus:changeAreaConfig(
     field,
     value,
@@ -677,7 +833,7 @@ function TerraformPlus:changeAreaConfig(
     local newStep =
         field == "areaStep" and number or self.areaStep
 
-    -- Bestehende, bestaetigte Messung neu auswerten
+    -- Vorhandene bestaetigte Messung aktualisieren.
     if self.pointA ~= nil and self.pointB ~= nil then
 
         local ok, area, err = pcall(
@@ -703,10 +859,7 @@ function TerraformPlus:changeAreaConfig(
 
     self[field] = number
 
-    -- Bei interaktiver Auswahl die Live-Vorschau verwerfen
-    if self.selection ~= nil
-        and self.selection.active then
-
+    if TerrainSelection ~= nil then
         TerrainSelection.invalidate(self)
     end
 
@@ -750,11 +903,7 @@ function TerraformPlus:consoleCommandPreview()
     self.previewEnabled = not self.previewEnabled
 
     return "[Terraform Plus] 1D-Vorschau "
-        .. (
-            self.previewEnabled
-            and "aktiviert"
-            or "deaktiviert"
-        )
+        .. (self.previewEnabled and "aktiviert" or "deaktiviert")
 end
 
 
@@ -764,11 +913,7 @@ function TerraformPlus:consoleCommandAreaVisual()
     self.areaEnabled = not self.areaEnabled
 
     return "[Terraform Plus] 2D-Vorschau "
-        .. (
-            self.areaEnabled
-            and "aktiviert"
-            or "deaktiviert"
-        )
+        .. (self.areaEnabled and "aktiviert" or "deaktiviert")
 end
 
 
@@ -776,47 +921,44 @@ end
 function TerraformPlus:consoleCommandRefresh()
 
     if self.selection ~= nil and self.selection.active then
-
-        return "[Terraform Plus] Zuerst tpConfirm oder tpCancel ausfuehren"
+        return "[Terraform Plus] Zuerst tpConfirm oder tpCancel"
     end
 
     if self.pointA == nil or self.pointB == nil then
         return "[Terraform Plus] Beide Messpunkte erforderlich"
     end
 
-    local yA, errA = self:getHeightAtPoint(
+    local heightA, errA = self:getHeightAtPoint(
         self.pointA
     )
 
-    if yA == nil then
-        return "[Terraform Plus] Fehler bei A: " .. tostring(errA)
+    if heightA == nil then
+        return "[Terraform Plus] Fehler A: " .. tostring(errA)
     end
 
-    local yB, errB = self:getHeightAtPoint(
+    local heightB, errB = self:getHeightAtPoint(
         self.pointB
     )
 
-    if yB == nil then
-        return "[Terraform Plus] Fehler bei B: " .. tostring(errB)
+    if heightB == nil then
+        return "[Terraform Plus] Fehler B: " .. tostring(errB)
     end
 
-    -- Neue Punktkopien verwenden
     local a = {
         x = self.pointA.x,
         z = self.pointA.z,
-        terrainY = yA
+        terrainY = heightA
     }
 
     local b = {
         x = self.pointB.x,
         z = self.pointB.z,
-        terrainY = yB
+        terrainY = heightB
     }
 
     local result, err = self:applyAnalysis(a, b)
 
     if result == nil then
-
         return "[Terraform Plus] Aktualisierung fehlgeschlagen: "
             .. tostring(err)
     end
@@ -837,11 +979,7 @@ function TerraformPlus:consoleCommandVisual()
     self.visualEnabled = not self.visualEnabled
 
     return "[Terraform Plus] Visualisierung "
-        .. (
-            self.visualEnabled
-            and "aktiviert"
-            or "deaktiviert"
-        )
+        .. (self.visualEnabled and "aktiviert" or "deaktiviert")
 end
 
 
@@ -865,7 +1003,6 @@ end
 function TerraformPlus:consoleCommandSelect()
 
     if TerrainSelection == nil then
-
         return "[Terraform Plus] TerrainSelection nicht geladen"
     end
 
@@ -877,7 +1014,9 @@ function TerraformPlus:consoleCommandSelect()
 
     self.visualEnabled = true
 
-    return "[Terraform Plus] Auswahl aktiv. Positionieren und tpAnchor ausfuehren"
+    return "[Terraform Plus] Auswahl aktiv ("
+        .. self.cursorMode
+        .. "). tpAnchor zum Fixieren von A"
 end
 
 
@@ -885,7 +1024,6 @@ end
 function TerraformPlus:consoleCommandAnchor()
 
     if TerrainSelection == nil then
-
         return "[Terraform Plus] TerrainSelection nicht geladen"
     end
 
@@ -896,7 +1034,7 @@ function TerraformPlus:consoleCommandAnchor()
     end
 
     return string.format(
-        "[Terraform Plus] Startpunkt fixiert: X=%.2f Z=%.2f H=%.3f m | Jetzt zu B gehen und tpConfirm",
+        "[Terraform Plus] Startpunkt fixiert: X=%.2f Z=%.2f H=%.3f m | tpConfirm fuer B",
         point.x,
         point.z,
         point.terrainY
@@ -908,14 +1046,12 @@ end
 function TerraformPlus:consoleCommandConfirm()
 
     if TerrainSelection == nil then
-
         return "[Terraform Plus] TerrainSelection nicht geladen"
     end
 
     local result, err = TerrainSelection.confirm(self)
 
     if result == nil then
-
         return "[Terraform Plus] Auswahl nicht bestaetigt: "
             .. tostring(err)
     end
@@ -950,21 +1086,70 @@ function TerraformPlus:consoleCommandSelection()
     local selection = self.selection
 
     if selection == nil or not selection.active then
-
-        return "[Terraform Plus] Auswahlmodus AUS (tpSelect zum Starten)"
+        return "[Terraform Plus] Auswahlmodus AUS"
     end
 
     if selection.stage == "A" then
 
-        return "[Terraform Plus] Auswahlmodus EIN | Startpunkt mit tpAnchor fixieren"
+        return "[Terraform Plus] Auswahlmodus EIN ("
+            .. self.cursorMode
+            .. ") | Punkt A mit tpAnchor setzen"
     end
 
-    return "[Terraform Plus] Auswahlmodus EIN | Endpunkt folgt Spieler | tpConfirm oder tpCancel"
+    return "[Terraform Plus] Auswahlmodus EIN ("
+        .. self.cursorMode
+        .. ") | Punkt B mit tpConfirm setzen"
 end
 
 
--- Beim Kartenwechsel aufraeumen.
+-- Callback: Starten oder Abbrechen.
+function TerraformPlus:onInputSelect()
+
+    local message
+
+    if self.selection ~= nil and self.selection.active then
+        message = self:consoleCommandCancel()
+    else
+        message = self:consoleCommandSelect()
+    end
+
+    print(message)
+end
+
+
+-- Callback: A oder B setzen.
+function TerraformPlus:onInputPlace()
+
+    local selection = self.selection
+
+    if selection == nil or not selection.active then
+        print("[Terraform Plus] Erst Auswahl starten")
+        return
+    end
+
+    local message
+
+    if selection.stage == "A" then
+        message = self:consoleCommandAnchor()
+    else
+        message = self:consoleCommandConfirm()
+    end
+
+    print(message)
+end
+
+
+-- Callback: Auswahl abbrechen.
+function TerraformPlus:onInputCancel()
+
+    print(self:consoleCommandCancel())
+end
+
+
+-- Karte entladen.
 function TerraformPlus:deleteMap()
+
+    self.mapActive = false
 
     if self.commandsRegistered then
 
@@ -975,11 +1160,26 @@ function TerraformPlus:deleteMap()
         self.commandsRegistered = false
     end
 
+    if g_inputBinding ~= nil
+        and type(g_inputBinding.removeActionEvent)
+            == "function" then
+
+        for _, eventId in ipairs(self.actionEventIds or {}) do
+
+            pcall(
+                g_inputBinding.removeActionEvent,
+                g_inputBinding,
+                eventId
+            )
+        end
+    end
+
+    self.actionEventIds = {}
+
     self.selection = nil
 
     self.pointA = nil
     self.pointB = nil
-
     self.measurement = nil
     self.profile = nil
     self.area = nil
@@ -992,5 +1192,4 @@ function TerraformPlus:deleteMap()
 end
 
 
--- Registrierung bei der GIANTS Engine
 addModEventListener(TerraformPlus)
