@@ -3,7 +3,7 @@
 <modDesc descVersion="105">
 
     <author>PanikHuhn</author>
-    <version>0.0.7.0</version>
+    <version>0.0.8.0</version>
 
     <title>
         <en>Terraform Plus</en>
@@ -12,34 +12,34 @@
 
     <description>
         <en><![CDATA[
-Terraform Plus - Terrain measurement and analysis.
+Terraform Plus - Interactive terrain analysis.
 
 Features:
 - Terrain height measurement
 - Two-point slope measurement
 - 1D terrain profile analysis
 - Cut and fill cross-section estimation
-- 2D terrain grid analysis
-- Cut and fill volume estimation
-- Adjustable work area width
-- Adjustable grid resolution
-- Visual terrain preview
+- 2D terrain grid and volume estimation
+- Adjustable work area width and grid resolution
+- Interactive player-following area selection
+- Live terrain preview
+- Confirm and cancel selection
 - Read-only terrain analysis
         ]]></en>
 
         <de><![CDATA[
-Terraform Plus - Gelaendeanalyse.
+Terraform Plus - Interaktive Gelaendeanalyse.
 
 Funktionen:
 - Messung der Gelaendehoehe
 - Steigungsmessung zwischen zwei Punkten
 - 1D-Gelaendeprofilanalyse
-- Berechnung der Abtrags- und Auftragsquerschnitte
-- 2D-Gelaenderaster
-- Abschaetzung von Abtrags- und Auftragsvolumen
-- Einstellbare Arbeitsbreite
-- Einstellbare Rasteraufloesung
-- Visuelle Gelaendevorschau
+- Abtrags- und Auftragsquerschnitte
+- 2D-Gelaenderaster und Volumenberechnung
+- Einstellbare Arbeitsbreite und Rasteraufloesung
+- Interaktive Gelaendeauswahl
+- Live-Gelaendevorschau
+- Auswahl bestaetigen oder abbrechen
 - Keine Veraenderung des Gelaendes
         ]]></de>
     </description>
@@ -53,6 +53,7 @@ Funktionen:
         <sourceFile filename="scripts/TerrainProfile.lua"/>
         <sourceFile filename="scripts/TerrainArea.lua"/>
         <sourceFile filename="scripts/TerrainVisualizer.lua"/>
+        <sourceFile filename="scripts/TerrainSelection.lua"/>
         <sourceFile filename="scripts/TerraformPlus.lua"/>
     </extraSourceFiles>
 
