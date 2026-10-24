@@ -3,7 +3,7 @@
 <modDesc descVersion="105">
 
     <author>PanikHuhn</author>
-    <version>0.0.6.0</version>
+    <version>0.0.7.0</version>
 
     <title>
         <en>Terraform Plus</en>
@@ -12,31 +12,35 @@
 
     <description>
         <en><![CDATA[
-            Terraform Plus - Terrain analysis and preview.
+Terraform Plus - Terrain measurement and analysis.
 
-            Features:
-            - Terrain height measurement
-            - Two-point slope measurement
-            - Terrain profile analysis
-            - Visual terrain profile
-            - Cut and fill preview
-            - Cut and fill cross-section estimation
-            - Profile refresh
-            - Read-only terrain analysis
+Features:
+- Terrain height measurement
+- Two-point slope measurement
+- 1D terrain profile analysis
+- Cut and fill cross-section estimation
+- 2D terrain grid analysis
+- Cut and fill volume estimation
+- Adjustable work area width
+- Adjustable grid resolution
+- Visual terrain preview
+- Read-only terrain analysis
         ]]></en>
 
         <de><![CDATA[
-            Terraform Plus - Gelaendeanalyse und Vorschau.
+Terraform Plus - Gelaendeanalyse.
 
-            Funktionen:
-            - Messung der Gelaendehoehe
-            - Steigungsmessung zwischen zwei Punkten
-            - Analyse des Gelaendeprofils
-            - Visuelle Darstellung des Hoehenprofils
-            - Vorschau fuer Abtrag und Auftrag
-            - Berechnung der Materialquerschnitte
-            - Aktualisierung der Profilanalyse
-            - Keine Veraenderung des Gelaendes
+Funktionen:
+- Messung der Gelaendehoehe
+- Steigungsmessung zwischen zwei Punkten
+- 1D-Gelaendeprofilanalyse
+- Berechnung der Abtrags- und Auftragsquerschnitte
+- 2D-Gelaenderaster
+- Abschaetzung von Abtrags- und Auftragsvolumen
+- Einstellbare Arbeitsbreite
+- Einstellbare Rasteraufloesung
+- Visuelle Gelaendevorschau
+- Keine Veraenderung des Gelaendes
         ]]></de>
     </description>
 
@@ -47,6 +51,7 @@
     <extraSourceFiles>
         <sourceFile filename="scripts/TerrainAdapter.lua"/>
         <sourceFile filename="scripts/TerrainProfile.lua"/>
+        <sourceFile filename="scripts/TerrainArea.lua"/>
         <sourceFile filename="scripts/TerrainVisualizer.lua"/>
         <sourceFile filename="scripts/TerraformPlus.lua"/>
     </extraSourceFiles>
