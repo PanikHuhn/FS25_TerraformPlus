@@ -1,102 +1,35 @@
-
 <?xml version="1.0" encoding="utf-8"?>
 <modDesc descVersion="105">
-
     <author>PanikHuhn</author>
-    <version>0.0.9.0</version>
-
-    <title>
-        <en>Terraform Plus</en>
-        <de>Terraform Plus</de>
-    </title>
-
+    <version>0.0.10.0</version>
+    <title><en>Terraform Plus</en><de>Terraform Plus</de></title>
     <description>
-        <en><![CDATA[
-Terraform Plus - Interactive terrain selection and analysis.
-
-Features:
-- Terrain height measurement
-- 1D terrain profile and slope analysis
-- 2D terrain area and volume estimation
-- Cut and fill preview
-- Adjustable area width and grid resolution
-- Interactive selection using camera raycasts
-- Optional keyboard shortcuts
-- Live terrain preview
-- Read-only terrain analysis
-        ]]></en>
-
-        <de><![CDATA[
-Terraform Plus - Interaktive Gelaendeauswahl.
-
-Funktionen:
-- Messung der Gelaendehoehe
-- 1D-Gelaendeprofil und Steigungsanalyse
-- 2D-Gelaenderaster und Volumenberechnung
-- Abtrags- und Auftragsvorschau
-- Einstellbare Arbeitsbreite und Rasteraufloesung
-- Kameragesteuerte Gelaendeauswahl
-- Optionale Tastaturkuerzel
-- Live-Gelaendevorschau
-- Keine Veraenderung des Gelaendes
-        ]]></de>
+        <en><![CDATA[Terraform Plus - 1D/2D terrain analysis, interactive camera selection and clickable tool interface. Read-only.]]></en>
+        <de><![CDATA[Terraform Plus - 1D/2D-Gelaendeanalyse, kameragesteuerte Auswahl und anklickbare Werkzeugoberflaeche. Keine Gelaendeaenderung.]]></de>
     </description>
-
     <iconFilename>icon.png</iconFilename>
-
     <multiplayer supported="false"/>
-
     <l10n>
-        <text name="input_TP_TOOL_SELECT">
-            <en>Toggle Terraform Plus Selection</en>
-            <de>Terraform Plus Auswahl starten</de>
-        </text>
-
-        <text name="input_TP_TOOL_PLACE">
-            <en>Set Terraform Plus Point</en>
-            <de>Terraform Plus Messpunkt setzen</de>
-        </text>
-
-        <text name="input_TP_TOOL_CANCEL">
-            <en>Cancel Terraform Plus Selection</en>
-            <de>Terraform Plus Auswahl abbrechen</de>
-        </text>
+        <text name="input_TP_TOOL_SELECT"><en>Toggle Terraform Plus Selection</en><de>Terraform Plus Auswahl starten</de></text>
+        <text name="input_TP_TOOL_PLACE"><en>Set Terraform Plus Point</en><de>Terraform Plus Messpunkt setzen</de></text>
+        <text name="input_TP_TOOL_CANCEL"><en>Cancel Terraform Plus Selection</en><de>Terraform Plus Auswahl abbrechen</de></text>
+        <text name="input_TP_TOOL_UI"><en>Toggle Terraform Plus UI</en><de>Terraform Plus Werkzeugfenster</de></text>
+        <text name="input_TP_TOOL_MOUSE"><en>Toggle Terraform Plus Mouse Mode</en><de>Terraform Plus Mausmodus</de></text>
     </l10n>
-
     <actions>
-        <action name="TP_TOOL_SELECT"
-                category="ONFOOT"
-                axisType="HALF"
-                ignoreComboMask="false"/>
-
-        <action name="TP_TOOL_PLACE"
-                category="ONFOOT"
-                axisType="HALF"
-                ignoreComboMask="false"/>
-
-        <action name="TP_TOOL_CANCEL"
-                category="ONFOOT"
-                axisType="HALF"
-                ignoreComboMask="false"/>
+        <action name="TP_TOOL_SELECT" category="ONFOOT" axisType="HALF" ignoreComboMask="false"/>
+        <action name="TP_TOOL_PLACE" category="ONFOOT" axisType="HALF" ignoreComboMask="false"/>
+        <action name="TP_TOOL_CANCEL" category="ONFOOT" axisType="HALF" ignoreComboMask="false"/>
+        <action name="TP_TOOL_UI" category="ONFOOT" axisType="HALF" ignoreComboMask="false"/>
+        <action name="TP_TOOL_MOUSE" category="ONFOOT" axisType="HALF" ignoreComboMask="false"/>
     </actions>
-
     <inputBinding>
-        <actionBinding action="TP_TOOL_SELECT">
-            <binding device="KB_MOUSE_DEFAULT"
-                     input="KEY_lctrl KEY_lalt KEY_t"/>
-        </actionBinding>
-
-        <actionBinding action="TP_TOOL_PLACE">
-            <binding device="KB_MOUSE_DEFAULT"
-                     input="KEY_lctrl KEY_lalt KEY_g"/>
-        </actionBinding>
-
-        <actionBinding action="TP_TOOL_CANCEL">
-            <binding device="KB_MOUSE_DEFAULT"
-                     input="KEY_lctrl KEY_lalt KEY_x"/>
-        </actionBinding>
+        <actionBinding action="TP_TOOL_SELECT"><binding device="KB_MOUSE_DEFAULT" input="KEY_lctrl KEY_lalt KEY_t"/></actionBinding>
+        <actionBinding action="TP_TOOL_PLACE"><binding device="KB_MOUSE_DEFAULT" input="KEY_lctrl KEY_lalt KEY_g"/></actionBinding>
+        <actionBinding action="TP_TOOL_CANCEL"><binding device="KB_MOUSE_DEFAULT" input="KEY_lctrl KEY_lalt KEY_x"/></actionBinding>
+        <actionBinding action="TP_TOOL_UI"><binding device="KB_MOUSE_DEFAULT" input="KEY_lctrl KEY_lalt KEY_u"/></actionBinding>
+        <actionBinding action="TP_TOOL_MOUSE"><binding device="KB_MOUSE_DEFAULT" input="KEY_lctrl KEY_lalt KEY_m"/></actionBinding>
     </inputBinding>
-
     <extraSourceFiles>
         <sourceFile filename="scripts/TerrainAdapter.lua"/>
         <sourceFile filename="scripts/TerrainProfile.lua"/>
@@ -104,7 +37,8 @@ Funktionen:
         <sourceFile filename="scripts/TerrainVisualizer.lua"/>
         <sourceFile filename="scripts/TerrainCursor.lua"/>
         <sourceFile filename="scripts/TerrainSelection.lua"/>
+        <sourceFile filename="scripts/TerrainToolUI.lua"/>
         <sourceFile filename="scripts/TerraformPlus.lua"/>
+        <sourceFile filename="scripts/TerraformPlusUIBridge.lua"/>
     </extraSourceFiles>
-
 </modDesc>
