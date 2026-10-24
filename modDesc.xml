@@ -3,7 +3,7 @@
 <modDesc descVersion="105">
 
     <author>PanikHuhn</author>
-    <version>0.0.5.0</version>
+    <version>0.0.6.0</version>
 
     <title>
         <en>Terraform Plus</en>
@@ -11,31 +11,33 @@
     </title>
 
     <description>
-        <en>
-            <![CDATA[
-            Terraform Plus - Terrain measurement and profile analysis.
+        <en><![CDATA[
+            Terraform Plus - Terrain analysis and preview.
 
             Features:
             - Terrain height measurement
             - Two-point slope measurement
             - Terrain profile analysis
-            - Visual markers and reference lines
+            - Visual terrain profile
+            - Cut and fill preview
+            - Cut and fill cross-section estimation
+            - Profile refresh
             - Read-only terrain analysis
-            ]]>
-        </en>
+        ]]></en>
 
-        <de>
-            <![CDATA[
-            Terraform Plus - Gelaendehoehenmessung und Profilanalyse.
+        <de><![CDATA[
+            Terraform Plus - Gelaendeanalyse und Vorschau.
 
             Funktionen:
             - Messung der Gelaendehoehe
             - Steigungsmessung zwischen zwei Punkten
             - Analyse des Gelaendeprofils
-            - Visuelle Markierungen und Referenzlinien
+            - Visuelle Darstellung des Hoehenprofils
+            - Vorschau fuer Abtrag und Auftrag
+            - Berechnung der Materialquerschnitte
+            - Aktualisierung der Profilanalyse
             - Keine Veraenderung des Gelaendes
-            ]]>
-        </de>
+        ]]></de>
     </description>
 
     <iconFilename>icon.png</iconFilename>

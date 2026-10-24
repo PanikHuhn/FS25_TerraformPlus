@@ -1,22 +1,30 @@
+
 -- Terraform Plus - Terrain Visualizer
--- Version: 0.0.5.0
+-- Version: 0.0.6.0
+-- World markers, terrain profile and cut/fill preview
 
 TerrainVisualizer = TerrainVisualizer or {}
 
--- Darstellungsparameter
 TerrainVisualizer.GROUND_OFFSET = 0.15
 TerrainVisualizer.MARKER_HEIGHT = 1.5
 TerrainVisualizer.MARKER_WIDTH = 0.35
 
--- Farben
+-- Maximal angezeigte Cut/Fill-Hilfslinien
+-- Die Profilberechnung selbst bleibt unveraendert genau.
+TerrainVisualizer.MAX_PREVIEW_GUIDES = 64
+TerrainVisualizer.MIN_PREVIEW_DIFFERENCE = 0.02
+
 TerrainVisualizer.COLOR_A = {0.1, 1.0, 0.3}
 TerrainVisualizer.COLOR_B = {1.0, 0.6, 0.1}
 
 TerrainVisualizer.COLOR_PROFILE = {0.1, 0.9, 1.0}
 TerrainVisualizer.COLOR_REFERENCE = {1.0, 0.25, 0.85}
 
+TerrainVisualizer.COLOR_CUT = {1.0, 0.2, 0.2}
+TerrainVisualizer.COLOR_FILL = {0.1, 1.0, 0.35}
 
--- Zeichnet eine Linie zwischen zwei Weltpositionen.
+
+-- Debug-Linie in Weltkoordinaten zeichnen.
 function TerrainVisualizer.drawLine(
     x1, y1, z1,
     x2, y2, z2,
@@ -26,16 +34,14 @@ function TerrainVisualizer.drawLine(
     drawDebugLine(
         x1, y1, z1,
         r, g, b,
-
         x2, y2, z2,
         r, g, b,
-
         false
     )
 end
 
 
--- Zeichnet einen farbigen Messpunkt.
+-- Markierung fuer Punkt A oder B.
 function TerrainVisualizer.drawMarker(point, label, color)
 
     if point == nil then
@@ -61,21 +67,21 @@ function TerrainVisualizer.drawMarker(point, label, color)
         r, g, b
     )
 
-    -- Kreuz entlang X
+    -- X-Kreuz
     TerrainVisualizer.drawLine(
         x - halfWidth, topY, z,
         x + halfWidth, topY, z,
         r, g, b
     )
 
-    -- Kreuz entlang Z
+    -- Z-Kreuz
     TerrainVisualizer.drawLine(
         x, topY, z - halfWidth,
         x, topY, z + halfWidth,
         r, g, b
     )
 
-    -- Beschriftung, falls API vorhanden
+    -- Beschriftung oberhalb des Messpunkts
     if Utils ~= nil
         and type(Utils.renderTextAtWorldPosition)
             == "function" then
@@ -93,16 +99,14 @@ function TerrainVisualizer.drawMarker(point, label, color)
 end
 
 
--- Zeichnet die ideale Steigung zwischen A und B.
+-- Magentafarbene Soll-Linie.
 function TerrainVisualizer.drawConnection(pointA, pointB)
 
     if pointA == nil or pointB == nil then
         return
     end
 
-    local offset =
-        TerrainVisualizer.GROUND_OFFSET + 0.15
-
+    local offset = TerrainVisualizer.GROUND_OFFSET + 0.15
     local color = TerrainVisualizer.COLOR_REFERENCE
 
     TerrainVisualizer.drawLine(
@@ -121,7 +125,7 @@ function TerrainVisualizer.drawConnection(pointA, pointB)
 end
 
 
--- Zeichnet den tatsaechlichen Gelaendeverlauf.
+-- Tuerkise Linie entlang der Ist-Hoehen.
 function TerrainVisualizer.drawProfile(profile)
 
     if profile == nil or profile.samples == nil then
@@ -134,12 +138,9 @@ function TerrainVisualizer.drawProfile(profile)
         return
     end
 
-    local offset =
-        TerrainVisualizer.GROUND_OFFSET + 0.15
-
+    local offset = TerrainVisualizer.GROUND_OFFSET + 0.15
     local color = TerrainVisualizer.COLOR_PROFILE
 
-    -- Aufeinanderfolgende Samples verbinden
     for i = 1, #samples - 1 do
 
         local current = samples[i]
@@ -162,16 +163,143 @@ function TerrainVisualizer.drawProfile(profile)
 end
 
 
--- Text mit Schatten darstellen.
+-- Zeichnet ein kleines Kreuz an einer Weltposition.
+function TerrainVisualizer.drawCross(x, y, z, color, size)
+
+    local r, g, b = color[1], color[2], color[3]
+
+    TerrainVisualizer.drawLine(
+        x - size, y, z,
+        x + size, y, z,
+        r, g, b
+    )
+
+    TerrainVisualizer.drawLine(
+        x, y, z - size,
+        x, y, z + size,
+        r, g, b
+    )
+end
+
+
+-- Einzelne Cut/Fill-Hilfslinie zeichnen.
+function TerrainVisualizer.drawChangeGuide(sample)
+
+    if sample == nil then
+        return
+    end
+
+    local difference = sample.requiredChange
+
+    if math.abs(difference)
+        < TerrainVisualizer.MIN_PREVIEW_DIFFERENCE then
+        return
+    end
+
+    local color
+
+    if difference > 0 then
+        -- Sollhoehe hoeher als Terrain: auffuellen
+        color = TerrainVisualizer.COLOR_FILL
+    else
+        -- Sollhoehe niedriger als Terrain: abtragen
+        color = TerrainVisualizer.COLOR_CUT
+    end
+
+    local offset = TerrainVisualizer.GROUND_OFFSET + 0.15
+
+    local actualY = sample.terrainY + offset
+    local targetY = sample.referenceY + offset
+
+    TerrainVisualizer.drawLine(
+        sample.x, actualY, sample.z,
+        sample.x, targetY, sample.z,
+        color[1], color[2], color[3]
+    )
+
+    -- Markierung an der angestrebten Hoehe
+    TerrainVisualizer.drawCross(
+        sample.x,
+        targetY,
+        sample.z,
+        color,
+        0.16
+    )
+end
+
+
+-- Rote und gruene Hoehendifferenzen darstellen.
+function TerrainVisualizer.drawPreview(profile)
+
+    if profile == nil or profile.samples == nil then
+        return
+    end
+
+    local samples = profile.samples
+
+    if #samples < 3 then
+        return
+    end
+
+    -- Darstellung auf maximal 64 regulaere Hilfslinien begrenzen.
+    -- Die numerischen Messdaten werden nicht reduziert.
+    local interiorCount = #samples - 2
+
+    local stride = math.max(
+        1,
+        math.ceil(
+            interiorCount
+            / TerrainVisualizer.MAX_PREVIEW_GUIDES
+        )
+    )
+
+    for i = 2, #samples - 1, stride do
+        TerrainVisualizer.drawChangeGuide(samples[i])
+    end
+
+    -- Die groessten Cut/Fill-Abweichungen immer markieren,
+    -- selbst wenn sie bei der Ausduennung uebersprungen wurden.
+    if profile.maxCutIndex ~= nil then
+
+        TerrainVisualizer.drawChangeGuide(
+            samples[profile.maxCutIndex]
+        )
+
+        local s = samples[profile.maxCutIndex]
+
+        TerrainVisualizer.drawCross(
+            s.x,
+            s.terrainY + TerrainVisualizer.GROUND_OFFSET + 0.15,
+            s.z,
+            TerrainVisualizer.COLOR_CUT,
+            0.6
+        )
+    end
+
+    if profile.maxFillIndex ~= nil then
+
+        TerrainVisualizer.drawChangeGuide(
+            samples[profile.maxFillIndex]
+        )
+
+        local s = samples[profile.maxFillIndex]
+
+        TerrainVisualizer.drawCross(
+            s.x,
+            s.terrainY + TerrainVisualizer.GROUND_OFFSET + 0.15,
+            s.z,
+            TerrainVisualizer.COLOR_FILL,
+            0.6
+        )
+    end
+end
+
+
+-- Text mit einem Schatten rendern.
 function TerrainVisualizer.drawTextLine(
-    x,
-    y,
-    value,
-    size,
-    color
+    x, y, value, size, color
 )
 
-    -- Textschatten
     setTextColor(0, 0, 0, 0.9)
 
     renderText(
@@ -181,7 +309,6 @@ function TerrainVisualizer.drawTextLine(
         value
     )
 
-    -- Eigentliche Textfarbe
     setTextColor(
         color[1],
         color[2],
@@ -193,12 +320,13 @@ function TerrainVisualizer.drawTextLine(
 end
 
 
--- Zeichnet das HUD mit den Messergebnissen.
+-- Messwerte und Vorschauinformationen im HUD anzeigen.
 function TerrainVisualizer.drawHUD(
     pointA,
     pointB,
     measurement,
-    profile
+    profile,
+    previewEnabled
 )
 
     if pointA == nil then
@@ -206,7 +334,7 @@ function TerrainVisualizer.drawHUD(
     end
 
     local lines = {
-        "TERRAFORM PLUS - TERRAIN MEASUREMENT",
+        "TERRAFORM PLUS - TERRAIN PREVIEW",
 
         string.format(
             "A (Gruen): %.3f m",
@@ -214,7 +342,6 @@ function TerrainVisualizer.drawHUD(
         )
     }
 
-    -- Punkt B
     if pointB ~= nil then
 
         table.insert(
@@ -226,14 +353,9 @@ function TerrainVisualizer.drawHUD(
         )
 
     else
-
-        table.insert(
-            lines,
-            "B: Noch nicht gesetzt"
-        )
+        table.insert(lines, "B: Noch nicht gesetzt")
     end
 
-    -- Steigungsberechnung
     if measurement ~= nil then
 
         table.insert(
@@ -255,7 +377,6 @@ function TerrainVisualizer.drawHUD(
         )
     end
 
-    -- Neue Profilinformationen
     if profile ~= nil then
 
         table.insert(
@@ -270,15 +391,6 @@ function TerrainVisualizer.drawHUD(
         table.insert(
             lines,
             string.format(
-                "Abweichung: +%.2f m / %.2f m",
-                profile.maxAbove,
-                profile.maxBelow
-            )
-        )
-
-        table.insert(
-            lines,
-            string.format(
                 "Steilster Abschnitt: %+.2f%%",
                 profile.steepestSegment
             )
@@ -287,30 +399,57 @@ function TerrainVisualizer.drawHUD(
         table.insert(
             lines,
             string.format(
-                "Min/Max: %.2f / %.2f m",
-                profile.minHeight,
-                profile.maxHeight
+                "ROT Abtrag: %.2f m2 | Max: %.2f m",
+                profile.cutArea,
+                profile.maxCutDepth
             )
         )
+
+        table.insert(
+            lines,
+            string.format(
+                "GRUEN Auftrag: %.2f m2 | Max: %.2f m",
+                profile.fillArea,
+                profile.maxFillDepth
+            )
+        )
+
+        table.insert(
+            lines,
+            string.format(
+                "Netto-Querschnitt: %+.2f m2",
+                profile.netArea
+            )
+        )
+
+        if previewEnabled then
+            table.insert(lines, "Vorschau: EIN (tpPreview)")
+        else
+            table.insert(lines, "Vorschau: AUS (tpPreview)")
+        end
     end
 
-    -- HUD ausgeben
     setTextAlignment(RenderText.ALIGN_LEFT)
     setTextBold(false)
 
     for i, line in ipairs(lines) do
 
-        local y = 0.945 - (i - 1) * 0.028
-
+        local y = 0.945 - (i - 1) * 0.027
         local color = {1, 1, 1}
 
         if i == 1 then
-
             color = {0.2, 0.95, 0.75}
             setTextBold(true)
 
-        else
+        elseif line:find("ROT Abtrag", 1, true) then
+            color = TerrainVisualizer.COLOR_CUT
+            setTextBold(false)
 
+        elseif line:find("GRUEN Auftrag", 1, true) then
+            color = TerrainVisualizer.COLOR_FILL
+            setTextBold(false)
+
+        else
             setTextBold(false)
         end
 
@@ -335,14 +474,15 @@ function TerrainVisualizer.draw(
     pointA,
     pointB,
     measurement,
-    profile
+    profile,
+    previewEnabled
 )
 
     if pointA == nil then
         return
     end
 
-    -- Punkt A
+    -- Startpunkt
     TerrainVisualizer.drawMarker(
         pointA,
         "A",
@@ -351,33 +491,36 @@ function TerrainVisualizer.draw(
 
     if pointB ~= nil then
 
-        -- Punkt B
+        -- Endpunkt
         TerrainVisualizer.drawMarker(
             pointB,
             "B",
             TerrainVisualizer.COLOR_B
         )
 
-        -- Ideale Steigung (Magenta)
+        -- Soll-Linie
         TerrainVisualizer.drawConnection(
             pointA,
             pointB
         )
 
-        -- Echtes Gelaendeprofil (Tuerkis)
+        -- Ist-Profil
         if profile ~= nil then
 
-            TerrainVisualizer.drawProfile(
-                profile
-            )
+            TerrainVisualizer.drawProfile(profile)
+
+            -- Cut/Fill-Vorschau
+            if previewEnabled then
+                TerrainVisualizer.drawPreview(profile)
+            end
         end
     end
 
-    -- Messwerte einblenden
     TerrainVisualizer.drawHUD(
         pointA,
         pointB,
         measurement,
-        profile
+        profile,
+        previewEnabled
     )
 end
