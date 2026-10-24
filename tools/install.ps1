@@ -1,5 +1,5 @@
 # Terraform Plus - strict development installation
-# Version: 0.0.10.0
+# Version: 0.0.11.0
 $ErrorActionPreference = 'Stop'
 
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
@@ -32,8 +32,8 @@ foreach ($relative in $requiredFiles) {
 
 [xml]$xml = Get-Content -LiteralPath (Join-Path $repo 'modDesc.xml') -Raw
 $version = $xml.modDesc.version.Trim()
-if ($version -ne '0.0.10.0') {
-    throw "Falsche Quellversion: $version (erwartet: 0.0.10.0)"
+if ($version -ne '0.0.11.0') {
+    throw "Falsche Quellversion: $version (erwartet: 0.0.11.0)"
 }
 
 $described = @($xml.modDesc.extraSourceFiles.sourceFile | ForEach-Object { $_.filename })

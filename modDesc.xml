@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <modDesc descVersion="105">
     <author>PanikHuhn</author>
-    <version>0.0.10.0</version>
+    <version>0.0.11.0</version>
     <title><en>Terraform Plus</en><de>Terraform Plus</de></title>
     <description>
-        <en><![CDATA[Terraform Plus - 1D/2D terrain analysis, interactive camera selection and clickable tool interface. Read-only.]]></en>
-        <de><![CDATA[Terraform Plus - 1D/2D-Gelaendeanalyse, kameragesteuerte Auswahl und anklickbare Werkzeugoberflaeche. Keine Gelaendeaenderung.]]></de>
+        <en><![CDATA[Terraform Plus - read-only terrain measurement, interactive selection, target elevation, slope, cut/fill modes and edge blending preview.]]></en>
+        <de><![CDATA[Terraform Plus - Gelaendeanalyse, interaktive Auswahl, Sollhoehe, Zielsteigung, Abtrag/Auftrag und weiche Randuebergaenge. Keine Gelaendeaenderung.]]></de>
     </description>
     <iconFilename>icon.png</iconFilename>
     <multiplayer supported="false"/>
@@ -37,6 +37,7 @@
         <sourceFile filename="scripts/TerrainVisualizer.lua"/>
         <sourceFile filename="scripts/TerrainCursor.lua"/>
         <sourceFile filename="scripts/TerrainSelection.lua"/>
+        <sourceFile filename="scripts/TerrainDesign.lua"/>
         <sourceFile filename="scripts/TerrainToolUI.lua"/>
         <sourceFile filename="scripts/TerraformPlus.lua"/>
         <sourceFile filename="scripts/TerraformPlusUIBridge.lua"/>
