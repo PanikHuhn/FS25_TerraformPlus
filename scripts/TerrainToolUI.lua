@@ -1,22 +1,19 @@
 
--- Terraform Plus v0.0.12.0 - Werkzeugfenster
--- Bereich / Gestaltung, Kamera-Sperre, Rechtsklick und beschleunigtes Halten.
+-- Terraform Plus v0.0.13.0 - UI: halbe Meter, Halten, Undo, Pruefung
 TerrainToolUI = TerrainToolUI or {}
-TerrainToolUI.X, TerrainToolUI.Y = 0.675, 0.12
-TerrainToolUI.W, TerrainToolUI.H = 0.305, 0.67
-TerrainToolUI.RIGHT_BUTTON = 3
-TerrainToolUI.HOLD_DELAY_MS = 400
-TerrainToolUI.HOLD_RAMP_MS = 3200
-TerrainToolUI.COLORS = {
-    panel={0.035,0.055,0.075,0.93}, header={0.045,0.22,0.23,0.96},
-    button={0.13,0.19,0.24,0.96}, active={0.11,0.48,0.37,0.97},
-    warning={0.55,0.24,0.20,0.95}, disabled={0.10,0.12,0.15,0.65},
-    text={0.94,0.97,1,1}, muted={0.67,0.74,0.79,1},
-    cut={1,0.4,0.4,1}, fill={0.35,1,0.61,1}
+TerrainToolUI.X,TerrainToolUI.Y,TerrainToolUI.W,TerrainToolUI.H=0.675,0.12,0.305,0.67
+TerrainToolUI.RIGHT_BUTTON=3
+TerrainToolUI.HOLD_DELAY_MS=400
+TerrainToolUI.HOLD_RAMP_MS=3200
+TerrainToolUI.COLORS={
+    panel={0.035,0.055,0.075,0.93},header={0.045,0.22,0.23,0.96},
+    button={0.13,0.19,0.24,0.96},active={0.11,0.48,0.37,0.97},
+    warning={0.55,0.24,0.20,0.95},disabled={0.10,0.12,0.15,0.65},
+    text={0.94,0.97,1,1},muted={0.67,0.74,0.79,1},
+    cut={1,0.4,0.4,1},fill={0.35,1,0.61,1}
 }
-
 local function menuOpen()
-    return g_gui ~= nil and type(g_gui.getIsGuiVisible)=="function"
+    return g_gui~=nil and type(g_gui.getIsGuiVisible)=="function"
         and g_gui:getIsGuiVisible()
 end
 local function getPlayerInput()
@@ -28,27 +25,21 @@ local function getPlayerInput()
     local input=g_localPlayer.inputComponent
     if input==nil or type(input.lock)~="function"
         or type(input.unlock)~="function" then
-        return nil,"PlayerInputComponent nicht verfuegbar"
+        return nil,"PlayerInputComponent fehlt"
     end
     return input
 end
 
 function TerrainToolUI.initialize(owner)
     TerrainToolUI.owner=owner
-    TerrainToolUI.visible=false
-    TerrainToolUI.mouseActive=false
-    TerrainToolUI.frozenSample=nil
-    TerrainToolUI.lockedInput=nil
+    TerrainToolUI.visible=false;TerrainToolUI.mouseActive=false
+    TerrainToolUI.frozenSample=nil;TerrainToolUI.lockedInput=nil
     TerrainToolUI.previousMouseVisible=false
-    TerrainToolUI.rightHeld=false
-    TerrainToolUI.pressedButton=nil
-    TerrainToolUI.hold=nil
-    TerrainToolUI.page="select"
-    TerrainToolUI.buttons={}
+    TerrainToolUI.rightHeld=false;TerrainToolUI.pressedButton=nil
+    TerrainToolUI.hold=nil;TerrainToolUI.buttons={};TerrainToolUI.page="select"
     TerrainToolUI.initialized=true
     if TerrainToolUI.rectangle~=nil then
-        TerrainToolUI.rectangle:delete()
-        TerrainToolUI.rectangle=nil
+        TerrainToolUI.rectangle:delete();TerrainToolUI.rectangle=nil
     end
     if g_overlayManager~=nil and g_plainColorSliceId~=nil
         and type(g_overlayManager.createOverlay)=="function" then
@@ -56,19 +47,23 @@ function TerrainToolUI.initialize(owner)
             g_overlayManager,g_plainColorSliceId,0,0,0,0)
         if ok then TerrainToolUI.rectangle=overlay end
     end
-    print("[Terraform Plus] TerrainToolUI initialisiert (0.0.12.0)")
+    print("[Terraform Plus] TerrainToolUI initialisiert (0.0.13.0)")
 end
 
+-- Beendet eine Tastenserie und fasst eine Design-Aenderung als Undo zusammen.
 function TerrainToolUI.stopHold()
+    local hold=TerrainToolUI.hold
     TerrainToolUI.hold=nil
     TerrainToolUI.pressedButton=nil
+    if hold~=nil and hold.design and TerrainToolUI.owner~=nil then
+        TerrainToolUI.owner:endDesignEdit()
+    end
 end
 
 function TerrainToolUI.disableMouse()
     if not TerrainToolUI.mouseActive then return end
     TerrainToolUI.mouseActive=false
-    TerrainToolUI.stopHold()
-    TerrainToolUI.frozenSample=nil
+    TerrainToolUI.stopHold();TerrainToolUI.frozenSample=nil
     local input=TerrainToolUI.lockedInput
     TerrainToolUI.lockedInput=nil
     if input~=nil and not menuOpen() then
@@ -110,76 +105,68 @@ function TerrainToolUI.toggleMouse()
     local sample,sampleErr=nil,nil
     local owner=TerrainToolUI.owner
     if owner~=nil then
-        local ok,result,message=pcall(owner.getSelectionSample,owner)
-        if ok and result~=nil then
-            sample={x=result.x,z=result.z,terrainY=result.terrainY}
-        else
-            sampleErr=ok and message or result
-        end
+        local ok,value,message=pcall(owner.getSelectionSample,owner)
+        if ok and value~=nil then
+            sample={x=value.x,z=value.z,terrainY=value.terrainY}
+        else sampleErr=ok and message or value end
     end
-    local oldCursor=g_inputBinding:getShowMouseCursor()
+    local previous=g_inputBinding:getShowMouseCursor()
     local locked,lockErr=pcall(input.lock,input)
     if not locked then return false,"Kamerasperre: "..tostring(lockErr) end
     if type(input.resetState)=="function" then pcall(input.resetState,input) end
-    local shown,showErr=pcall(g_inputBinding.setShowMouseCursor,
-        g_inputBinding,true)
+    local shown,showErr=pcall(g_inputBinding.setShowMouseCursor,g_inputBinding,true)
     if not shown then
         pcall(input.unlock,input)
         return false,"Mauszeiger: "..tostring(showErr)
     end
-    TerrainToolUI.previousMouseVisible=oldCursor
-    TerrainToolUI.lockedInput=input
-    TerrainToolUI.frozenSample=sample
-    TerrainToolUI.mouseActive=true
-    TerrainToolUI.visible=true
+    TerrainToolUI.previousMouseVisible=previous
+    TerrainToolUI.lockedInput=input;TerrainToolUI.frozenSample=sample
+    TerrainToolUI.mouseActive=true;TerrainToolUI.visible=true
     print("[Terraform Plus] Kamerasteuerung gesperrt (UI-Mausmodus)")
-    if sample==nil then
-        print("[Terraform Plus] Kein fixiertes Kameraziel: "..tostring(sampleErr))
-    end
+    if sample==nil then print("[Terraform Plus] Kein fixiertes Kameraziel: "..
+        tostring(sampleErr)) end
     return true,true
 end
 
--- Nummerische Bedienelemente: ein Klick = ein Basisschritt.
--- Beim Halten steigt der Schritt kontinuierlich bis zum Faktor 10.
-local numeric = {
-    width={field="areaWidth",base=2,min=1,max=80,method="consoleCommandWidth"},
-    step={field="areaStep",base=0.5,min=0.5,max=5,method="consoleCommandGridStep"},
-    height={field="offset",base=0.5,min=-100,max=100,method="consoleCommandTargetOffset",design=true},
-    slope={field="slope",base=1,min=-100,max=100,method="consoleCommandTargetSlope",design=true},
-    feather={field="feather",base=1,min=0,max=20,method="consoleCommandEdgeBlend",design=true},
-    limit={field="maxChange",base=0.5,min=0.5,max=50,method="consoleCommandChangeLimit",design=true}
+-- Keine prozentuale Vergroesserung der Schrittweite!
+-- Jeder Breiten-Tick entspricht immer exakt 0,5 m.
+-- Beim Halten steigt ausschliesslich die Anzahl Ticks pro Sekunde.
+local numeric={
+    width={field="areaWidth",step=0.5,min=1,max=80,fn="consoleCommandWidth"},
+    step={field="areaStep",step=0.5,min=0.5,max=5,fn="consoleCommandGridStep"},
+    height={field="offset",step=0.5,min=-100,max=100,fn="consoleCommandTargetOffset",design=true},
+    slope={field="slope",step=1,min=-100,max=100,fn="consoleCommandTargetSlope",design=true},
+    feather={field="feather",step=1,min=0,max=20,fn="consoleCommandEdgeBlend",design=true},
+    limit={field="maxChange",step=0.5,min=0.5,max=50,fn="consoleCommandChangeLimit",design=true}
 }
-local function numericSpec(id)
-    local key,sign=id:match("^(%a+)(Plus)$")
-    if sign~=nil then return numeric[key],1 end
-    key,sign=id:match("^(%a+)(Minus)$")
-    if sign~=nil then return numeric[key],-1 end
+local function specFor(id)
+    local key=id:match("^(%a+)Plus$")
+    if key~=nil then return numeric[key],1 end
+    key=id:match("^(%a+)Minus$")
+    if key~=nil then return numeric[key],-1 end
     return nil,nil
 end
-local function updateNumeric(owner,id,factor,log)
-    local spec,sign=numericSpec(id)
-    if spec==nil then return false end
-    local state=spec.design and owner.design or owner
-    if state==nil then return false end
-    local before=state[spec.field]
-    if type(before)~="number" then return false end
-    local after=math.max(spec.min,math.min(spec.max,
-        before+sign*spec.base*factor))
-    after=math.floor(after*1000+0.5)/1000
-    if math.abs(after-before)<0.000001 then return false end
-    local message=owner[spec.method](owner,tostring(after))
-    if log and message~=nil then print(message) end
+local function tick(owner,id,doLog)
+    local s,direction=specFor(id)
+    if s==nil then return false end
+    local source=s.design and owner.design or owner
+    if source==nil or type(source[s.field])~="number" then return false end
+    local old=source[s.field]
+    -- In ganzzahligen Tick-Einheiten rechnen: keine krummen Float-Zwischenwerte.
+    local index=math.floor((old-s.min)/s.step+0.5)
+    local maximum=math.floor((s.max-s.min)/s.step+0.5)
+    local nextIndex=math.max(0,math.min(maximum,index+direction))
+    if nextIndex==index then return false end
+    local value=s.min+nextIndex*s.step
+    local message=owner[s.fn](owner,tostring(value))
+    if doLog and message~=nil then print(message) end
     return true
 end
 
 function TerrainToolUI.update(owner,dt)
-    if TerrainToolUI.mouseActive and menuOpen() then
-        TerrainToolUI.disableMouse()
-    end
+    if TerrainToolUI.mouseActive and menuOpen() then TerrainToolUI.disableMouse() end
     if not TerrainToolUI.visible or menuOpen() then
-        TerrainToolUI.rightHeld=false
-        TerrainToolUI.stopHold()
-        return
+        TerrainToolUI.rightHeld=false;TerrainToolUI.stopHold();return
     end
     if Input~=nil and type(Input.isMouseButtonPressed)=="function" then
         local right=Input.MOUSE_BUTTON_RIGHT or TerrainToolUI.RIGHT_BUTTON
@@ -188,38 +175,30 @@ function TerrainToolUI.update(owner,dt)
             if pressed and not TerrainToolUI.rightHeld then
                 TerrainToolUI.rightHeld=true
                 print(owner:consoleCommandUIMouse())
-            elseif not pressed then
-                TerrainToolUI.rightHeld=false
-            end
+            elseif not pressed then TerrainToolUI.rightHeld=false end
         end
     end
     local hold=TerrainToolUI.hold
     if not TerrainToolUI.mouseActive or hold==nil then return end
-    local elapsed=type(dt)=="number" and math.max(0,math.min(dt,250)) or 0
-    hold.elapsed=hold.elapsed+elapsed
+    local delta=type(dt)=="number" and math.max(0,math.min(dt,250)) or 0
+    hold.elapsed=hold.elapsed+delta
     local count=0
-    while hold.elapsed>=hold.nextRepeat and count<6 do
-        local t=math.max(0,math.min(1,
-            (hold.nextRepeat-TerrainToolUI.HOLD_DELAY_MS)/TerrainToolUI.HOLD_RAMP_MS))
-        local multiplier=1+9*t
-        if not updateNumeric(owner,hold.id,multiplier,false) then
-            TerrainToolUI.stopHold()
-            break
-        end
+    while hold.elapsed>=hold.nextRepeat and count<16 do
+        if not tick(owner,hold.id,false) then TerrainToolUI.stopHold();break end
         hold.repeats=hold.repeats+1
-        hold.multiplier=multiplier
-        hold.nextRepeat=hold.nextRepeat+(160-85*t)
+        local progress=math.min(1,math.max(0,
+            (hold.nextRepeat-TerrainToolUI.HOLD_DELAY_MS)/TerrainToolUI.HOLD_RAMP_MS))
+        local interval=200-180*progress  -- 5 Hz bis 50 Hz (10x schneller)
+        hold.nextRepeat=hold.nextRepeat+interval
         count=count+1
     end
 end
 
-function TerrainToolUI.rect(x,y,w,h,c)
-    local overlay=TerrainToolUI.rectangle
-    if overlay==nil then return end
-    overlay:setPosition(x,y)
-    overlay:setDimension(w,h)
-    overlay:setColor(c[1],c[2],c[3],c[4])
-    overlay:render()
+function TerrainToolUI.rect(x,y,w,h,color)
+    local r=TerrainToolUI.rectangle
+    if r==nil then return end
+    r:setPosition(x,y);r:setDimension(w,h)
+    r:setColor(color[1],color[2],color[3],color[4]);r:render()
 end
 function TerrainToolUI.text(x,y,value,size,color,center)
     setTextAlignment(center and RenderText.ALIGN_CENTER or RenderText.ALIGN_LEFT)
@@ -228,22 +207,20 @@ function TerrainToolUI.text(x,y,value,size,color,center)
 end
 function TerrainToolUI.button(id,label,x,y,w,h,enabled,kind)
     local c=TerrainToolUI.COLORS
-    local color=not enabled and c.disabled
-        or kind=="active" and c.active
+    local color=not enabled and c.disabled or kind=="active" and c.active
         or kind=="warning" and c.warning or c.button
     TerrainToolUI.rect(x,y,w,h,color)
-    TerrainToolUI.text(x+w/2,y+h*0.3,label,0.0125,
+    TerrainToolUI.text(x+w/2,y+h*0.30,label,0.012,
         enabled and c.text or c.muted,true)
-    table.insert(TerrainToolUI.buttons,
-        {id=id,x=x,y=y,w=w,h=h,enabled=enabled})
+    table.insert(TerrainToolUI.buttons,{id=id,x=x,y=y,w=w,h=h,enabled=enabled})
 end
-function TerrainToolUI.setting(id,label,value,y,min,max,unit)
+function TerrainToolUI.setting(id,label,value,y,low,high,unit)
     local c=TerrainToolUI.COLORS
-    TerrainToolUI.text(0.690,y+0.044,label,0.0125,c.muted)
-    TerrainToolUI.button(id.."Minus","-",0.690,y,0.050,0.033,value>min)
-    TerrainToolUI.text(0.823,y+0.009,
+    TerrainToolUI.text(0.690,y+0.040,label,0.012,c.muted)
+    TerrainToolUI.button(id.."Minus","-",0.690,y,0.050,0.031,value>low)
+    TerrainToolUI.text(0.824,y+0.009,
         string.format("%.2f %s",value,unit or "m"),0.013,c.text,true)
-    TerrainToolUI.button(id.."Plus","+",0.909,y,0.055,0.033,value<max)
+    TerrainToolUI.button(id.."Plus","+",0.909,y,0.055,0.031,value<high)
 end
 
 function TerrainToolUI.draw(owner)
@@ -253,114 +230,129 @@ function TerrainToolUI.draw(owner)
     TerrainToolUI.buttons={}
     TerrainToolUI.rect(0.675,0.12,0.305,0.67,c.panel)
     TerrainToolUI.rect(0.675,0.746,0.305,0.044,c.header)
-    TerrainToolUI.text(0.690,0.757,"TERRAFORM PLUS  0.0.12.0",0.016,c.text)
+    TerrainToolUI.text(0.690,0.757,"TERRAFORM PLUS  0.0.13.0",0.016,c.text)
     TerrainToolUI.button("close","X",0.939,0.752,0.026,0.031,true,"warning")
-    TerrainToolUI.button("tabSelect","BEREICH",0.690,0.697,0.132,0.040,true,
+    TerrainToolUI.button("tabSelect","BEREICH",0.690,0.700,0.087,0.036,true,
         TerrainToolUI.page=="select" and "active")
-    TerrainToolUI.button("tabDesign","GESTALTUNG",0.833,0.697,0.132,0.040,true,
+    TerrainToolUI.button("tabDesign","GESTALTUNG",0.783,0.700,0.087,0.036,true,
         TerrainToolUI.page=="design" and "active")
+    TerrainToolUI.button("tabReview","PRUEFUNG",0.876,0.700,0.089,0.036,true,
+        TerrainToolUI.page=="review" and "active")
     local selection=owner.selection
     local selecting=selection~=nil and selection.active
-    local baseArea=selecting and (selection.preview and selection.preview.area)
+    local area=selecting and (selection.preview and selection.preview.area)
         or (not selecting and owner.area) or nil
 
     if TerrainToolUI.page=="select" then
-        local stage=not selecting and "Kein Bereich aktiv"
+        TerrainToolUI.text(0.690,0.660,not selecting and "Kein Bereich aktiv"
             or selection.stage=="A" and "Startpunkt anvisieren"
-            or "Endpunkt anvisieren"
-        TerrainToolUI.text(0.690,0.664,stage,0.014,c.text)
-        TerrainToolUI.text(0.690,0.634,TerrainToolUI.mouseActive
+            or "Endpunkt anvisieren",0.013,c.text)
+        TerrainToolUI.text(0.690,0.626,TerrainToolUI.mouseActive
             and "Maus aktiv - Kameraziel fixiert"
             or "Rechtsklick: UI-Maus aktivieren",0.012,c.muted)
-        if baseArea~=nil then
-            TerrainToolUI.text(0.690,0.600,string.format(
-                "Flaeche %.1f m2 | %d Rasterzellen",baseArea.area,#baseArea.samples),
-                0.013,c.text)
-            TerrainToolUI.text(0.690,0.571,string.format(
-                "Abtrag %.1f m3 / Auftrag %.1f m3",
-                baseArea.cutVolume,baseArea.fillVolume),0.012,c.text)
+        if area~=nil then
+            TerrainToolUI.text(0.690,0.592,string.format(
+                "Flaeche: %.1f m2 | %d Zellen",area.area,#area.samples),0.013,c.text)
+            TerrainToolUI.text(0.690,0.564,string.format(
+                "Abtrag %.1f / Auftrag %.1f m3",area.cutVolume,area.fillVolume),0.012,c.text)
         else
-            TerrainToolUI.text(0.690,0.583,"Noch keine Flaechenberechnung",0.013,c.muted)
+            TerrainToolUI.text(0.690,0.586,"Noch keine Bereichsanalyse",0.013,c.muted)
         end
-        TerrainToolUI.button("start","NEUER BEREICH",0.690,0.512,0.132,0.041,
+        TerrainToolUI.button("start","NEUER BEREICH",0.690,0.510,0.132,0.041,
             not selecting,"active")
-        TerrainToolUI.button("refresh","NEU BERECHNEN",0.833,0.512,0.132,0.041,
+        TerrainToolUI.button("refresh","NEU BERECHNEN",0.833,0.510,0.132,0.041,
             not selecting and owner.pointA~=nil and owner.pointB~=nil)
-        local hasAim=not TerrainToolUI.mouseActive
-            or TerrainToolUI.frozenSample~=nil
+        local hasAim=not TerrainToolUI.mouseActive or TerrainToolUI.frozenSample~=nil
         TerrainToolUI.button("anchor","STARTPUNKT SETZEN",0.690,0.460,0.132,0.041,
             selecting and selection.stage=="A" and hasAim)
         TerrainToolUI.button("confirm","ENDPUNKT SETZEN",0.833,0.460,0.132,0.041,
             selecting and selection.stage=="B" and hasAim)
-        TerrainToolUI.button("clear","BEREICH LOESCHEN",0.690,0.406,0.275,0.041,
-            selecting or owner.pointA~=nil or owner.pointB~=nil,
-            "warning")
-        TerrainToolUI.setting("width","BREITE DES BEREICHS",owner.areaWidth,
-            0.336,TerrainArea.MIN_WIDTH,TerrainArea.MAX_WIDTH,"m")
+        TerrainToolUI.button("clear","BEREICH LOESCHEN",0.690,0.408,0.275,0.041,
+            selecting or owner.pointA~=nil or owner.pointB~=nil,"warning")
+        TerrainToolUI.setting("width","BREITE (0,5-M-SCHRITTE)",owner.areaWidth,
+            0.338,TerrainArea.MIN_WIDTH,TerrainArea.MAX_WIDTH,"m")
         TerrainToolUI.setting("step","RASTERABSTAND",owner.areaStep,
-            0.265,TerrainArea.MIN_STEP,TerrainArea.MAX_STEP,"m")
-        TerrainToolUI.text(0.690,0.243,
-            "+ / - halten: bis zu 10x schneller",0.0115,c.muted)
-        TerrainToolUI.button("preview",
-            owner.previewEnabled and "HOEHENPROFIL AN" or "HOEHENPROFIL AUS",
-            0.690,0.160,0.132,0.041,true,
+            0.267,TerrainArea.MIN_STEP,TerrainArea.MAX_STEP,"m")
+        TerrainToolUI.text(0.690,0.245,"Halten: schnellere Wiederholung, fester Schritt",
+            0.011,c.muted)
+        TerrainToolUI.button("preview",owner.previewEnabled and "HOEHENPROFIL AN"
+            or "HOEHENPROFIL AUS",0.690,0.158,0.132,0.042,true,
             owner.previewEnabled and "active")
-        TerrainToolUI.button("areaVisual",
-            owner.areaEnabled and "3D-VORSCHAU AN" or "3D-VORSCHAU AUS",
-            0.833,0.160,0.132,0.041,true,
+        TerrainToolUI.button("areaVisual",owner.areaEnabled and "3D-VORSCHAU AN"
+            or "3D-VORSCHAU AUS",0.833,0.158,0.132,0.042,true,
             owner.areaEnabled and "active")
-    else
-        local d=owner.design or {
-            offset=0,slope=0,feather=0,maxChange=10,mode="all",enabled=true
-        }
-        local height=owner.pointA and owner.pointA.terrainY+d.offset or nil
-        local design,err=owner:getDesignArea()
-        TerrainToolUI.text(0.690,0.664,height~=nil and
-            string.format("Zielhoehe bei A: %.2f m",height)
-            or "Zuerst Bereich A-B festlegen",0.013,c.text)
-        TerrainToolUI.setting("height","HOEHENVERSATZ BEI A",d.offset,
-            0.588,TerrainDesign.MIN_OFFSET,TerrainDesign.MAX_OFFSET,"m")
-        TerrainToolUI.setting("slope","ZIELSTEIGUNG",d.slope,
-            0.520,TerrainDesign.MIN_SLOPE,TerrainDesign.MAX_SLOPE,"%")
-        TerrainToolUI.setting("feather","WEICHER RAND",d.feather,
-            0.452,TerrainDesign.MIN_FEATHER,TerrainDesign.MAX_FEATHER,"m")
-        TerrainToolUI.setting("limit","MAX. HOEHENAENDERUNG",d.maxChange,
-            0.384,TerrainDesign.MIN_CHANGE,TerrainDesign.MAX_CHANGE,"m")
-        TerrainToolUI.text(0.690,0.363,"GELAENDEAENDERUNG",0.012,c.muted)
-        TerrainToolUI.button("modeAll","BEIDES",0.690,0.325,0.088,0.033,true,
+    elseif TerrainToolUI.page=="design" then
+        local d=owner.design
+        local target=owner.pointA and owner.pointA.terrainY+d.offset or nil
+        local proposed,err=owner:getDesignArea()
+        TerrainToolUI.text(0.690,0.661,target~=nil and string.format(
+            "Zielhoehe bei A: %.2f m",target) or "Erst Bereich A-B festlegen",0.013,c.text)
+        TerrainToolUI.setting("height","HOEHENVERSATZ",d.offset,0.585,-100,100,"m")
+        TerrainToolUI.setting("slope","ZIELSTEIGUNG",d.slope,0.520,-100,100,"%")
+        TerrainToolUI.setting("feather","WEICHER RAND",d.feather,0.455,0,20,"m")
+        TerrainToolUI.setting("limit","MAX. HOEHENAENDERUNG",d.maxChange,0.390,0.5,50,"m")
+        TerrainToolUI.button("modeAll","BEIDES",0.690,0.344,0.088,0.033,true,
             d.mode=="all" and "active")
-        TerrainToolUI.button("modeCut","NUR ABTRAG",0.782,0.325,0.088,0.033,true,
+        TerrainToolUI.button("modeCut","NUR ABTRAG",0.782,0.344,0.088,0.033,true,
             d.mode=="cut" and "active")
-        TerrainToolUI.button("modeFill","NUR AUFTRAG",0.874,0.325,0.091,0.033,true,
+        TerrainToolUI.button("modeFill","NUR AUFTRAG",0.874,0.344,0.091,0.033,true,
             d.mode=="fill" and "active")
-        if design~=nil then
-            TerrainToolUI.text(0.690,0.299,string.format(
-                "Abtrag: %.2f m3",design.cutVolume),0.013,c.cut)
-            TerrainToolUI.text(0.690,0.275,string.format(
-                "Auftrag: %.2f m3",design.fillVolume),0.013,c.fill)
-            TerrainToolUI.text(0.690,0.251,string.format(
-                "Netto: %+.2f m3",design.netVolume),0.013,c.text)
-            TerrainToolUI.text(0.690,0.227,string.format(
-                "Begrenzt: %d / %d Zellen",design.limitedCells,#design.samples),
-                0.012,design.limitedCells>0 and c.cut or c.muted)
+        if proposed~=nil then
+            TerrainToolUI.text(0.690,0.314,string.format(
+                "Abtrag %.1f / Auftrag %.1f m3",proposed.cutVolume,
+                proposed.fillVolume),0.013,c.text)
+            TerrainToolUI.text(0.690,0.286,string.format(
+                "Hoehenlimit: %d Zellen betroffen",proposed.limitedCells),0.012,c.muted)
         else
-            TerrainToolUI.text(0.690,0.270,err or "Keine Vorschau",0.012,c.muted)
+            TerrainToolUI.text(0.690,0.294,err or "Keine Vorschau",0.012,c.muted)
         end
-        TerrainToolUI.button("designVisual",
-            d.enabled and "SOLL-VORSCHAU AN" or "SOLL-VORSCHAU AUS",
-            0.690,0.150,0.170,0.042,true,d.enabled and "active")
+        TerrainToolUI.button("undo","RUECKGAENGIG",0.690,0.245,0.132,0.037,
+            #(owner.designUndo or {})>0)
+        TerrainToolUI.button("redo","WIEDERHOLEN",0.833,0.245,0.132,0.037,
+            #(owner.designRedo or {})>0)
+        TerrainToolUI.button("designVisual",d.enabled and "SOLL-VORSCHAU AN"
+            or "SOLL-VORSCHAU AUS",0.690,0.158,0.170,0.042,true,
+            d.enabled and "active")
         TerrainToolUI.button("resetDesign","ZURUECKSETZEN",
-            0.869,0.150,0.096,0.042,true)
+            0.869,0.158,0.096,0.042,true)
+    else
+        TerrainToolUI.text(0.690,0.656,"HEIGHTMAP-PRUEFUNG (NUR LESEN)",0.013,c.text)
+        TerrainToolUI.text(0.690,0.620,
+            "Zuerst Bereich bestaetigen und Entwurf festlegen",0.012,c.muted)
+        local fresh=TerrainPlan.isFresh(owner)
+        local plan=fresh and owner.terrainPlan or nil
+        if plan~=nil then
+            TerrainToolUI.text(0.690,0.565,string.format(
+                "Heightmap-Raster: %.3f m",plan.unit),0.013,c.text)
+            TerrainToolUI.text(0.690,0.532,string.format(
+                "Geprueft: %d / Betroffen: %d",plan.checked,#plan.points),0.013,c.text)
+            TerrainToolUI.text(0.690,0.499,string.format(
+                "Abtrag ca. %.1f m3",plan.cutVolume),0.013,c.cut)
+            TerrainToolUI.text(0.690,0.466,string.format(
+                "Auftrag ca. %.1f m3",plan.fillVolume),0.013,c.fill)
+            TerrainToolUI.text(0.690,0.433,
+                plan.approved and "Status: PRUEFPLAN FREIGEGEBEN"
+                    or "Status: BITTE FREIGEBEN",0.013,c.text)
+        else
+            TerrainToolUI.text(0.690,0.536,"Noch kein aktueller Pruefplan",0.013,c.muted)
+        end
+        TerrainToolUI.button("prepare","PRUEFRASTER ERSTELLEN",
+            0.690,0.366,0.275,0.046,
+            not selecting and owner.pointA~=nil and owner.pointB~=nil,"active")
+        TerrainToolUI.button("approve","PLAN FREIGEBEN",
+            0.690,0.298,0.275,0.046,plan~=nil and not plan.approved,"warning")
+        TerrainToolUI.button("run","PROBELAUF (KEINE AENDERUNG)",
+            0.690,0.230,0.275,0.046,plan~=nil and plan.approved,"active")
+        TerrainToolUI.text(0.690,0.165,
+            "Keine Hoehenwerte werden geschrieben!",0.012,c.muted)
     end
-    setTextColor(1,1,1,1)
     setTextAlignment(RenderText.ALIGN_LEFT)
+    setTextColor(1,1,1,1)
 end
 
 function TerrainToolUI.findButton(x,y)
     for _,b in ipairs(TerrainToolUI.buttons or {}) do
-        if x>=b.x and x<=b.x+b.w and y>=b.y and y<=b.y+b.h then
-            return b
-        end
+        if x>=b.x and x<=b.x+b.w and y>=b.y and y<=b.y+b.h then return b end
     end
     return nil
 end
@@ -368,25 +360,23 @@ end
 function TerrainToolUI.perform(owner,id)
     if id=="tabSelect" then TerrainToolUI.page="select";return end
     if id=="tabDesign" then TerrainToolUI.page="design";return end
+    if id=="tabReview" then TerrainToolUI.page="review";return end
     local methods={
         close="consoleCommandUI",start="consoleCommandSelect",
         anchor="consoleCommandAnchor",confirm="consoleCommandConfirm",
         clear="consoleCommandClear",refresh="consoleCommandRefresh",
         preview="consoleCommandPreview",areaVisual="consoleCommandAreaVisual",
-        designVisual="consoleCommandDesignVisual",
-        resetDesign="consoleCommandDesignReset"
+        designVisual="consoleCommandDesignVisual",resetDesign="consoleCommandDesignReset",
+        undo="consoleCommandDesignUndo",redo="consoleCommandDesignRedo",
+        prepare="consoleCommandPlanPrepare"
     }
-    local method=methods[id]
     local result
-    if method~=nil then
-        result=owner[method](owner)
-    elseif id=="modeAll" then
-        result=owner:consoleCommandWorkMode("all")
-    elseif id=="modeCut" then
-        result=owner:consoleCommandWorkMode("cut")
-    elseif id=="modeFill" then
-        result=owner:consoleCommandWorkMode("fill")
-    end
+    if methods[id]~=nil then result=owner[methods[id]](owner)
+    elseif id=="modeAll" then result=owner:consoleCommandWorkMode("all")
+    elseif id=="modeCut" then result=owner:consoleCommandWorkMode("cut")
+    elseif id=="modeFill" then result=owner:consoleCommandWorkMode("fill")
+    elseif id=="approve" then result=owner:consoleCommandPlanApprove("CONFIRM")
+    elseif id=="run" then result=owner:consoleCommandPlanRun("RUN") end
     if result~=nil then print(result) end
 end
 
@@ -398,8 +388,7 @@ function TerrainToolUI.mouseEvent(owner,x,y,down,up,button,used)
             TerrainToolUI.rightHeld=true
             print(owner:consoleCommandUIMouse())
         end
-        if up and (Input==nil
-            or type(Input.isMouseButtonPressed)~="function") then
+        if up and (Input==nil or type(Input.isMouseButtonPressed)~="function") then
             TerrainToolUI.rightHeld=false
         end
         return true
@@ -412,17 +401,19 @@ function TerrainToolUI.mouseEvent(owner,x,y,down,up,button,used)
     local left=Input~=nil and Input.MOUSE_BUTTON_LEFT or 1
     if button~=left then return false end
     local hit=TerrainToolUI.findButton(x,y)
-    local inside=x>=TerrainToolUI.X and x<=TerrainToolUI.X+TerrainToolUI.W
+    local inPanel=x>=TerrainToolUI.X and x<=TerrainToolUI.X+TerrainToolUI.W
         and y>=TerrainToolUI.Y and y<=TerrainToolUI.Y+TerrainToolUI.H
     if down then
         TerrainToolUI.stopHold()
         if hit~=nil and hit.enabled then
             TerrainToolUI.pressedButton=hit.id
-            if numericSpec(hit.id)~=nil then
-                updateNumeric(owner,hit.id,1,true)
+            local spec=specFor(hit.id)
+            if spec~=nil then
+                if spec.design then owner:beginDesignEdit() end
+                tick(owner,hit.id,true)
                 TerrainToolUI.hold={id=hit.id,elapsed=0,
-                    nextRepeat=TerrainToolUI.HOLD_DELAY_MS,
-                    repeats=0,multiplier=1}
+                    nextRepeat=TerrainToolUI.HOLD_DELAY_MS,repeats=0,
+                    design=spec.design}
             end
             return true
         end
@@ -431,32 +422,24 @@ function TerrainToolUI.mouseEvent(owner,x,y,down,up,button,used)
         local hold=TerrainToolUI.hold
         TerrainToolUI.stopHold()
         if id~=nil then
-            if hold~=nil and hold.repeats>0 then
-                print(string.format(
-                    "[Terraform Plus] Schnellverstellung: %d Wiederholungen (bis %.1fx)",
-                    hold.repeats,hold.multiplier))
-            elseif hold==nil and hit~=nil and hit.enabled and hit.id==id then
+            if hold~=nil then
+                if hold.repeats>0 then
+                    print(string.format("[Terraform Plus] Schnellverstellung: %d Ticks (feste Schrittweite)",hold.repeats))
+                end
+            elseif hit~=nil and hit.enabled and hit.id==id then
                 TerrainToolUI.perform(owner,id)
             end
             return true
         end
-    elseif TerrainToolUI.hold~=nil and (hit==nil
-        or hit.id~=TerrainToolUI.hold.id) then
-        -- Cursor vom gehaltenen Feld weggezogen: sofort stoppen.
-        TerrainToolUI.stopHold()
     end
-    return (down or up) and inside or false
+    return (down or up) and inPanel or false
 end
 
 function TerrainToolUI.delete()
-    TerrainToolUI.disableMouse()
-    TerrainToolUI.stopHold()
+    TerrainToolUI.disableMouse();TerrainToolUI.stopHold()
     if TerrainToolUI.rectangle~=nil then
-        TerrainToolUI.rectangle:delete()
-        TerrainToolUI.rectangle=nil
+        TerrainToolUI.rectangle:delete();TerrainToolUI.rectangle=nil
     end
-    TerrainToolUI.visible=false
-    TerrainToolUI.initialized=false
-    TerrainToolUI.buttons={}
-    TerrainToolUI.owner=nil
+    TerrainToolUI.visible=false;TerrainToolUI.initialized=false
+    TerrainToolUI.buttons={};TerrainToolUI.owner=nil
 end
